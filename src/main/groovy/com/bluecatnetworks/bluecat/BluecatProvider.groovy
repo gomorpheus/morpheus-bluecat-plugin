@@ -102,7 +102,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                             apiPath = getServicePath(rpcConfig.serviceUrl) + 'addGenericRecord'
                     }
 
-                    def results = client.callJsonApi(apiUrl,apiPath,new HttpApiClient.RequestOptions(queryParams: apiQuery, headers: [Authorization: "BAMAuthToken: ${token.token}".toString()]),"POST")
+                    def results = client.callJsonApi(apiUrl,apiPath,new HttpApiClient.RequestOptions(queryParams: apiQuery, headers: [Authorization: "BAMAuthToken: ${token.token}".toString()],ignoreSSL: rpcConfig.ignoreSSL),"POST")
                     //error
                     if(results?.success && results?.error != true) {
                         rtn.success = true
@@ -159,7 +159,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                         if(token.success) {
                             String apiUrl = cleanServiceUrl(rpcConfig.serviceUrl)
                             String apiPath = getServicePath(rpcConfig.serviceUrl) + 'delete'
-                            HttpApiClient.RequestOptions requestOptions = new HttpApiClient.RequestOptions()
+                            HttpApiClient.RequestOptions requestOptions = new HttpApiClient.RequestOptions(ignoreSSL: rpcConfig.ignoreSSL)
                             requestOptions.headers = [Authorization: "BAMAuthToken: ${token.token}".toString()]
                             requestOptions.queryParams = [objectId: record.externalId]
                             //we have an A Record to delete
@@ -355,7 +355,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
             listResults = collectAllNetworks(client,token,poolServer, opts)
         }
         if(listResults.success) {
-            List apiItems = listResults.data as List<Map>
+            List apiItems = listResults.networks as List<Map>
             Observable<NetworkPoolIdentityProjection> poolRecords = morpheus.network.pool.listIdentityProjections(poolServer.id)
 
             SyncTask<NetworkPoolIdentityProjection,Map,NetworkPool> syncTask = new SyncTask(poolRecords, apiItems as Collection<Map>)
@@ -672,7 +672,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                 apiQuery.recordName = hostname
                 apiQuery.viewName = viewName
             }
-            HttpApiClient.RequestOptions requestOptions = new HttpApiClient.RequestOptions()
+            HttpApiClient.RequestOptions requestOptions = new HttpApiClient.RequestOptions(ignoreSSL: rpcConfig.ignoreSSL)
             requestOptions.queryParams = apiQuery as Map<String,String>
             requestOptions.headers = [Authorization: "BAMAuthToken: ${token}".toString()]
             def results = client.callJsonApi(apiUrl,apiPath,null,null,requestOptions, 'POST')
@@ -698,9 +698,9 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                         networkPoolIp.externalId = results.content
 
                     } else {
-                        def extraProps = extractNetworkProperties(results.content?.properties)
+                        def extraProps = extractNetworkProperties(results.data?.properties)
                         networkPoolIp.ipAddress = extraProps.address
-                        networkPoolIp.externalId = results.content.id
+                        networkPoolIp.externalId = results.data.id
                     }
                     if(!hostname.endsWith('localdomain') && hostname.contains('.') && createARecord != false) {
                         def domainRecord = new NetworkDomainRecord(networkDomain: domain, networkPoolIp: networkPoolIp, name: hostname, fqdn: hostname, source: 'user', type: 'HOST', externalId: networkPoolIp.externalId)
@@ -780,7 +780,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
             if(token.success) {
                 String apiUrl = cleanServiceUrl(rpcConfig.serviceUrl)
                 String apiPath = getServicePath(rpcConfig.serviceUrl) + 'deleteDeviceInstance'
-                HttpApiClient.RequestOptions requestOptions = new HttpApiClient.RequestOptions()
+                HttpApiClient.RequestOptions requestOptions = new HttpApiClient.RequestOptions(ignoreSSL: rpcConfig.ignoreSSL)
                 requestOptions.headers = [Authorization: "BAMAuthToken: ${token.token}".toString()]
                 requestOptions.queryParams = [identifier:poolIp.ipAddress, configName: poolIp.networkPool.configuration]
                 ServiceResponse results = client.callJsonApi(apiUrl,apiPath,null,null,requestOptions,'POST')
@@ -1227,8 +1227,8 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
             //get the filter list
             def apiUrl = cleanServiceUrl(rpcConfig.serviceUrl)
             def apiPath = getServicePath(rpcConfig.serviceUrl) + 'getEntityById'
-            HttpApiClient.RequestOptions requestOptions = new HttpApiClient.RequestOptions()
-            requestOptions.headers = [Authorization: "Configuration: ${token}".toString()]
+            HttpApiClient.RequestOptions requestOptions = new HttpApiClient.RequestOptions(ignoreSSL: rpcConfig.ignoreSSL)
+            requestOptions.headers = [Authorization: "BAMAuthToken: ${token}".toString()]
             requestOptions.queryParams = [id:entityId.toString()]
             def results = client.callJsonApi(apiUrl,apiPath,null,null,requestOptions,'GET')
 
@@ -1252,8 +1252,8 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
             //get the filter list
             def apiUrl = cleanServiceUrl(rpcConfig.serviceUrl)
             def apiPath = getServicePath(rpcConfig.serviceUrl) + 'getParent'
-            HttpApiClient.RequestOptions requestOptions = new HttpApiClient.RequestOptions()
-            requestOptions.headers = [Authorization: "Configuration: ${token}".toString()]
+            HttpApiClient.RequestOptions requestOptions = new HttpApiClient.RequestOptions(ignoreSSL: rpcConfig.ignoreSSL)
+            requestOptions.headers = [Authorization: "BAMAuthToken: ${token}".toString()]
             requestOptions.queryParams = [id:entityId.toString()]
             def results = client.callJsonApi(apiUrl,apiPath,null,null,requestOptions,'GET')
             if(results?.success && results?.error != true) {
@@ -1282,17 +1282,17 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
             def attempt = 0
             while(hasMore == true && attempt < 1000) {
                 attempt++
-                HttpApiClient.RequestOptions requestOptions = new HttpApiClient.RequestOptions()
-                requestOptions.headers = [Authorization: "Configuration: ${token}".toString()]
-                requestOptions.queryParams = [type:'IP4Block', start:start.toString(), count:count.toString(), parentId:"0"]
+                HttpApiClient.RequestOptions requestOptions = new HttpApiClient.RequestOptions(ignoreSSL: rpcConfig.ignoreSSL)
+                requestOptions.headers = [Authorization: "BAMAuthToken: ${token}".toString()]
+                requestOptions.queryParams = [type:'Configuration', start:start.toString(), count:count.toString(), parentId:"0"]
                 def results = client.callJsonApi(apiUrl,apiPath,null,null,requestOptions,'GET')
                 if(results?.success && results?.error != true) {
                     rtn.success = true
                 }
-                if(results?.success && results?.error != true && results.content?.size() > 0) {
-                    def rows = results.content
+                if(results?.success && results?.error != true && results.data?.size() > 0) {
+                    def rows = results.data
                     rtn.configurations += rows
-                    if(results.content?.size() >= count) {
+                    if(results.data?.size() >= count) {
                         start += count
                     } else {
                         hasMore = false
@@ -1321,7 +1321,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
             def attempt = 0
             while(hasMore == true && attempt < 1000) {
                 attempt++
-                HttpApiClient.RequestOptions requestOptions = new HttpApiClient.RequestOptions()
+                HttpApiClient.RequestOptions requestOptions = new HttpApiClient.RequestOptions(ignoreSSL: rpcConfig.ignoreSSL)
                 requestOptions.headers = [Authorization: "BAMAuthToken: ${token}".toString()]
                 requestOptions.queryParams = [type:'IP4Block', start:start.toString(), count:count.toString(), parentId:opts.parentId?.toString()]
                 def results = client.callJsonApi(apiUrl,apiPath,null,null,requestOptions,'GET')
@@ -1356,7 +1356,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
             Integer attempt = 0i
             while(hasMore == true && attempt < 1000) {
                 attempt++
-                HttpApiClient.RequestOptions requestOptions = new HttpApiClient.RequestOptions()
+                HttpApiClient.RequestOptions requestOptions = new HttpApiClient.RequestOptions(ignoreSSL: rpcConfig.ignoreSSL)
                 requestOptions.headers = [Authorization: "BAMAuthToken: ${token}".toString()]
                 requestOptions.queryParams = [type:'GenericRecord', start:start.toString(), count:count.toString(), parentId:opts.parentId?.toString()]
                 def results = client.callJsonApi(apiUrl,apiPath,null,null,requestOptions,'GET')
@@ -1396,7 +1396,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
             def attempt = 0i
             while(hasMore && attempt < 1000) {
                 attempt++
-                HttpApiClient.RequestOptions requestOptions = new HttpApiClient.RequestOptions()
+                HttpApiClient.RequestOptions requestOptions = new HttpApiClient.RequestOptions(ignoreSSL: rpcConfig.ignoreSSL)
                 requestOptions.headers = [Authorization: "BAMAuthToken: ${token}".toString()]
                 requestOptions.queryParams = [type:'GenericRecord', start:start.toString(), count:count.toString(), parentId:opts.parentId?.toString()]
                 def results = client.callJsonApi(apiUrl,apiPath,null,null,requestOptions,'GET')
@@ -1436,7 +1436,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
             def attempt = 0
             while(hasMore && attempt < 1000) {
                 attempt++
-                HttpApiClient.RequestOptions requestOptions = new HttpApiClient.RequestOptions()
+                HttpApiClient.RequestOptions requestOptions = new HttpApiClient.RequestOptions(ignoreSSL: rpcConfig.ignoreSSL)
                 requestOptions.headers = [Authorization: "BAMAuthToken: ${token}".toString()]
                 requestOptions.queryParams = [type:'AliasRecord', start:start.toString(), count:count.toString(), parentId:opts.parentId?.toString()]
                 def results = client.callJsonApi(apiUrl,apiPath,null,null,requestOptions,'GET')
@@ -1475,7 +1475,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
             Integer attempt = 0i
             while(hasMore == true && attempt < 1000) {
                 attempt++
-                HttpApiClient.RequestOptions requestOptions = new HttpApiClient.RequestOptions()
+                HttpApiClient.RequestOptions requestOptions = new HttpApiClient.RequestOptions(ignoreSSL: rpcConfig.ignoreSSL)
                 requestOptions.headers = [Authorization: "BAMAuthToken: ${token}".toString()]
                 requestOptions.queryParams = [type:'Zone', start:start.toString(), count:count.toString(), parentId:opts.parentId?.toString()]
                 def results = client.callJsonApi(apiUrl,apiPath,null,null,requestOptions,'GET')
@@ -1515,7 +1515,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
             def doPaging = opts.doPaging != null ? opts.doPaging : true
             while(hasMore && attempt < 1000) {
                 attempt++
-                HttpApiClient.RequestOptions requestOptions = new HttpApiClient.RequestOptions()
+                HttpApiClient.RequestOptions requestOptions = new HttpApiClient.RequestOptions(ignoreSSL: rpcConfig.ignoreSSL)
                 requestOptions.headers = [Authorization: "BAMAuthToken: ${token}".toString()]
                 requestOptions.queryParams = [type:'IP4Network', start:start.toString(), count:count.toString()]
                 if(opts.parentId) {
@@ -1572,6 +1572,34 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
     }
 
     /**
+     * Periodically called to refresh and sync data coming from the relevant integration. Most integration providers
+     * provide a method like this that is called periodically (typically 5 - 10 minutes). DNS Sync operates on a 10min
+     * cycle by default. Useful for caching DNS Records created outside of Morpheus.
+     * NOTE: This method is unused when paired with a DNS Provider so simply return null
+     * @param integration The Integration Object contains all the saved information regarding configuration of the DNS Provider.
+     */
+    @Override
+    void refresh(AccountIntegration integration) {
+        //NOOP
+    }
+
+    /**
+     * Validation Method used to validate all inputs applied to the integration of an DNS Provider upon save.
+     * If an input fails validation or authentication information cannot be verified, Error messages should be returned
+     * via a {@link ServiceResponse} object where the key on the error is the field name and the value is the error message.
+     * If the error is a generic authentication error or unknown error, a standard message can also be sent back in the response.
+     * NOTE: This is unused when paired with an IPAMProvider interface
+     * @param integration The Integration Object contains all the saved information regarding configuration of the DNS Provider.
+     * @param opts any custom payload submission options may exist here
+     * @return A response is returned depending on if the inputs are valid or not.
+     */
+    @Override
+    ServiceResponse verifyAccountIntegration(AccountIntegration integration, Map opts) {
+        //NOOP
+        return null
+    }
+
+    /**
      * An IPAM Provider can register pool types for display and capability information when syncing IPAM Pools
      * @return a List of {@link NetworkPoolType} to be loaded into the Morpheus database.
      */
@@ -1596,7 +1624,9 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                 new OptionType(code: 'bluecat.servicePassword', name: 'Service Password', inputType: OptionType.InputType.PASSWORD, fieldName: 'servicePassword', fieldLabel: 'Password', fieldContext: 'domain', displayOrder: 3, localCredential: true),
                 new OptionType(code: 'bluecat.throttleRate', name: 'Throttle Rate', inputType: OptionType.InputType.NUMBER, defaultValue: 0, fieldName: 'serviceThrottleRate', fieldLabel: 'Throttle Rate', fieldContext: 'domain', displayOrder: 4),
                 new OptionType(code: 'bluecat.ignoreSsl', name: 'Ignore SSL', inputType: OptionType.InputType.CHECKBOX, defaultValue: 0, fieldName: 'ignoreSsl', fieldLabel: 'Disable SSL SNI Verification', fieldContext: 'domain', displayOrder: 5),
-                new OptionType(code: 'bluecat.inventoryExisting', name: 'Inventory Existing', inputType: OptionType.InputType.CHECKBOX, defaultValue: 0, fieldName: 'inventoryExisting', fieldLabel: 'Inventory Existing', fieldContext: 'config', displayOrder: 6)
+                new OptionType(code: 'bluecat.inventoryExisting', name: 'Inventory Existing', inputType: OptionType.InputType.CHECKBOX, defaultValue: 0, fieldName: 'inventoryExisting', fieldLabel: 'Inventory Existing', fieldContext: 'config', displayOrder: 6),
+                new OptionType(code: 'bluecat.networkFilter', name: 'Network Filter', inputType: OptionType.InputType.TEXT, fieldName: 'networkFilter', fieldLabel: 'Network Filter', fieldContext: 'domain', displayOrder: 7),
+
         ]
     }
 
@@ -1656,7 +1686,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
             def apiUrl = cleanServiceUrl(rpcConfig.serviceUrl)
             def apiPath = getServicePath(rpcConfig.serviceUrl) + 'login'
             Map<String,String> apiQuery = [username:rpcConfig.username, password:rpcConfig.password]
-            def results = client.callJsonApi(apiUrl,apiPath,new HttpApiClient.RequestOptions(queryParams: apiQuery),"GET")
+            def results = client.callJsonApi(apiUrl,apiPath,new HttpApiClient.RequestOptions(queryParams: apiQuery, ignoreSSL: rpcConfig.ignoreSSL),"GET")
 
             if(results?.success && results?.error != true) {
                 log.debug("login: ${results}")
@@ -1680,7 +1710,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
         try {
             def apiUrl = cleanServiceUrl(rpcConfig.serviceUrl)
             def apiPath = getServicePath(rpcConfig.serviceUrl) + 'logout'
-            HttpApiClient.RequestOptions requestOptions = new HttpApiClient.RequestOptions()
+            HttpApiClient.RequestOptions requestOptions = new HttpApiClient.RequestOptions(ignoreSSL: rpcConfig.ignoreSSL)
             requestOptions.headers = [Authorization: "BAMAuthToken: ${token}".toString()]
             client.callJsonApi(apiUrl,apiPath,requestOptions,"GET")
         } catch(e) {
@@ -1713,7 +1743,8 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
         return [
                 username:poolServer.credentialData?.username ?: poolServer.serviceUsername,
                 password:poolServer.credentialData?.password ?: poolServer.servicePassword,
-                serviceUrl:poolServer.serviceUrl
+                serviceUrl:poolServer.serviceUrl,
+                ignoreSSL: poolServer.ignoreSsl
         ]
     }
 
