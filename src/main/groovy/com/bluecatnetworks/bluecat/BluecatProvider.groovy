@@ -643,70 +643,98 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
     ServiceResponse createHostRecord(NetworkPoolServer poolServer, NetworkPool networkPool, NetworkPoolIp networkPoolIp, NetworkDomain domain, Boolean createARecord, Boolean createPtrRecord) {
         HttpApiClient client = new HttpApiClient();
         def rpcConfig = getRpcConfig(poolServer)
+        def token
+
         try {
-            def hostname = networkPoolIp.hostname
-            if(domain && hostname && !hostname.endsWith(domain.name))  {
-                hostname = "${hostname}.${domain.name}"
-            }
-
-            def apiUrl = cleanServiceUrl(rpcConfig.serviceUrl)
-            def apiPath = getServicePath(rpcConfig.serviceUrl) + 'addDeviceInstance'
-            def hostInfo
-            def viewName = null
-            if(networkPool.dnsSearchPath) {
-                def viewobjresults = getEntity(poolServer,networkPool.dnsSearchPath.toLong(),[:])
-                if(!viewobjresults.success) {
-                    log.warn("Error obtaining default view information for selected pool ${networkPool.name} -- viewId: ${networkPool.dnsSearchPath}")
-                } else {
-                    viewName = viewobjresults.entity.name
+            token = login(client,rpcConfig)
+            if(token.success) {
+                def hostname = networkPoolIp.hostname
+                if(domain && hostname && !hostname.endsWith(domain.name))  {
+                    hostname = "${hostname}.${domain.name}"
                 }
-            }
 
-            def apiQuery = [configName: networkPool.configuration, ipAddressMode: 'REQUEST_STATIC', ipEntity: networkPool.cidr]
-            if(networkPoolIp.ipAddress) {
-                apiQuery.ipAddressMode = 'PASS_VALUE'
-                apiQuery.ipEntity = networkPoolIp.ipAddress
-            }
-            if(!hostname.endsWith('localdomain') && hostname.contains('.') && createARecord != false) {
-                apiQuery.zoneName = hostname.split(/\./)[1..-1].join('.')
-                apiQuery.recordName = hostname
-                apiQuery.viewName = viewName
-            }
-            HttpApiClient.RequestOptions requestOptions = new HttpApiClient.RequestOptions(ignoreSSL: rpcConfig.ignoreSSL)
-            requestOptions.queryParams = apiQuery as Map<String,String>
-            requestOptions.headers = [Authorization: "BAMAuthToken: ${token}".toString()]
-            def results = client.callJsonApi(apiUrl,apiPath,null,null,requestOptions, 'POST')
-            if(!results.success || results.error) {
-                if(!hostname.endsWith('localdomain') && hostname.contains('.') && createARecord != false) {
-                    hostInfo = "${hostname},${networkPool.dnsSearchPath ? networkPool.dnsSearchPath : ''},true,false".toString()  //hostname,viewId,reverseFlag,sameAsZoneFlag
-                } else {
-                    hostInfo = "${hostname}".toString()  //hostname,viewId,reverseFlag,sameAsZoneFlag
+                def apiUrl = cleanServiceUrl(rpcConfig.serviceUrl)
+                def apiPath = getServicePath(rpcConfig.serviceUrl) + 'addDeviceInstance'
+                def hostInfo
+                def viewName = null
+                if(networkPool.dnsSearchPath) {
+                    def viewobjresults = getEntity(poolServer,networkPool.dnsSearchPath.toLong(),[:])
+                    if(!viewobjresults.success) {
+                        log.warn("Error obtaining default view information for selected pool ${networkPool.name} -- viewId: ${networkPool.dnsSearchPath}")
+                    } else {
+                        viewName = viewobjresults.entity.name
+                    }
                 }
-                requestOptions.queryParams = [parentId:networkPool.externalId, macAddress:'', configurationId:networkPool.internalId, action:'MAKE_STATIC', hostInfo:hostInfo]
-                apiPath = getServicePath(rpcConfig.serviceUrl) + 'assignNextAvailableIP4Address'
-                // time to dry without dns
+
+                def apiQuery = [configName: networkPool.configuration, ipAddressMode: 'REQUEST_STATIC', ipEntity: networkPool.cidr]
                 if(networkPoolIp.ipAddress) {
-                    apiQuery.ip4Address = networkPoolIp.ipAddress
-                    apiPath = getServicePath(rpcConfig.serviceUrl) + 'assignIP4Address'
+                    apiQuery.ipAddressMode = 'PASS_VALUE'
+                    apiQuery.ipEntity = networkPoolIp.ipAddress
                 }
-                log.warn("unable to allocate DNS records for bluecat IPAM. Attempting simple ip allocation instead.")
-                results = client.callJsonApi(apiUrl,apiPath,null,null,requestOptions, 'POST')
-
-                if(results?.success && results?.error != true) {
-                    log.info("getNextIpAddress: ${results}")
+                if(!hostname.endsWith('localdomain') && hostname.contains('.') && createARecord != false) {
+                    apiQuery.zoneName = hostname.split(/\./)[1..-1].join('.')
+                    apiQuery.recordName = hostname
+                    apiQuery.viewName = viewName
+                }
+                HttpApiClient.RequestOptions requestOptions = new HttpApiClient.RequestOptions(ignoreSSL: rpcConfig.ignoreSSL)
+                requestOptions.queryParams = apiQuery as Map<String,String>
+                requestOptions.headers = [Authorization: "BAMAuthToken: ${token.token}".toString()]
+                def results = client.callJsonApi(apiUrl,apiPath,null,null,requestOptions, 'POST')
+                if(!results.success || results.error) {
+                    if(!hostname.endsWith('localdomain') && hostname.contains('.') && createARecord != false) {
+                        hostInfo = "${hostname},${networkPool.dnsSearchPath ? networkPool.dnsSearchPath : ''},true,false".toString()  //hostname,viewId,reverseFlag,sameAsZoneFlag
+                    } else {
+                        hostInfo = "${hostname}".toString()  //hostname,viewId,reverseFlag,sameAsZoneFlag
+                    }
+                    requestOptions.queryParams = [parentId:networkPool.externalId, macAddress:'', configurationId:networkPool.internalId, action:'MAKE_STATIC', hostInfo:hostInfo]
+                    apiPath = getServicePath(rpcConfig.serviceUrl) + 'assignNextAvailableIP4Address'
+                    // time to dry without dns
                     if(networkPoolIp.ipAddress) {
-                        networkPoolIp.externalId = results.content
+                        apiQuery.ip4Address = networkPoolIp.ipAddress
+                        apiPath = getServicePath(rpcConfig.serviceUrl) + 'assignIP4Address'
+                    }
+                    log.warn("unable to allocate DNS records for bluecat IPAM. Attempting simple ip allocation instead.")
+                    results = client.callJsonApi(apiUrl,apiPath,null,null,requestOptions, 'POST')
+
+                    if(results?.success && results?.error != true) {
+                        log.info("getNextIpAddress: ${results}")
+                        if(networkPoolIp.ipAddress) {
+                            networkPoolIp.externalId = results.content
+
+                        } else {
+                            def extraProps = extractNetworkProperties(results.data?.properties)
+                            networkPoolIp.ipAddress = extraProps.address
+                            networkPoolIp.externalId = results.data.id
+                        }
+                        if(!hostname.endsWith('localdomain') && hostname.contains('.') && createARecord != false) {
+                            def domainRecord = new NetworkDomainRecord(networkDomain: domain, networkPoolIp: networkPoolIp, name: hostname, fqdn: hostname, source: 'user', type: 'HOST', externalId: networkPoolIp.externalId)
+                            morpheus.network.domain.record.create(domainRecord).blockingGet()
+                            networkPoolIp.domain = domain
+
+                        }
+                        if (networkPoolIp.id) {
+                            networkPoolIp = morpheus.network.pool.poolIp.save(networkPoolIp)?.blockingGet()
+                        } else {
+                            networkPoolIp = morpheus.network.pool.poolIp.create(networkPoolIp)?.blockingGet()
+                        }
+                        return ServiceResponse.success(networkPoolIp)
 
                     } else {
-                        def extraProps = extractNetworkProperties(results.data?.properties)
-                        networkPoolIp.ipAddress = extraProps.address
-                        networkPoolIp.externalId = results.data.id
+                        log.info("API Call Failed to allocate IP Address {}",results)
+                        return ServiceResponse.error("API Call Failed to allocate IP Address ${results}",null,networkPoolIp)
                     }
+                } else {
+                    def extraProps = extractNetworkProperties(results.data)
+                    networkPoolIp.ipAddress = extraProps.ip
+                    networkPoolIp.externalId = extraProps.id
                     if(!hostname.endsWith('localdomain') && hostname.contains('.') && createARecord != false) {
-                        def domainRecord = new NetworkDomainRecord(networkDomain: domain, networkPoolIp: networkPoolIp, name: hostname, fqdn: hostname, source: 'user', type: 'HOST', externalId: networkPoolIp.externalId)
-                        morpheus.network.domain.record.create(domainRecord).blockingGet()
+                        if (createARecord && domain) {
+                            def domainRecord = new NetworkDomainRecord(networkDomain: domain,ttl:3600, networkPoolIp: networkPoolIp, name: hostname, fqdn: hostname, source: 'user', type: 'A',content: networkPoolIp.ipAddress)
+                            morpheus.network.domain.record.create(domainRecord).blockingGet()
+                        }
+                    }
+                    if(createARecord) {
                         networkPoolIp.domain = domain
-
                     }
                     if (networkPoolIp.id) {
                         networkPoolIp = morpheus.network.pool.poolIp.save(networkPoolIp)?.blockingGet()
@@ -714,31 +742,11 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                         networkPoolIp = morpheus.network.pool.poolIp.create(networkPoolIp)?.blockingGet()
                     }
                     return ServiceResponse.success(networkPoolIp)
-
-                } else {
-                    log.info("API Call Failed to allocate IP Address {}",results)
-                    return ServiceResponse.error("API Call Failed to allocate IP Address ${results}",null,networkPoolIp)
                 }
             } else {
-                def extraProps = extractNetworkProperties(results.data)
-                networkPoolIp.ipAddress = extraProps.ip
-                networkPoolIp.externalId = extraProps.id
-                if(!hostname.endsWith('localdomain') && hostname.contains('.') && createARecord != false) {
-                    if (createARecord && domain) {
-                        def domainRecord = new NetworkDomainRecord(networkDomain: domain,ttl:3600, networkPoolIp: networkPoolIp, name: hostname, fqdn: hostname, source: 'user', type: 'A',content: networkPoolIp.ipAddress)
-                            morpheus.network.domain.record.create(domainRecord).blockingGet()
-                    }
-                }
-                if(createARecord) {
-                    networkPoolIp.domain = domain
-                }
-                if (networkPoolIp.id) {
-                    networkPoolIp = morpheus.network.pool.poolIp.save(networkPoolIp)?.blockingGet()
-                } else {
-                    networkPoolIp = morpheus.network.pool.poolIp.create(networkPoolIp)?.blockingGet()
-                }
-                return ServiceResponse.success(networkPoolIp)
+                return ServiceResponse.error("Error acquiring authentication token for Bluecat integration ${poolServer.name} during host record creation.")
             }
+
         } catch(e) {
             log.error("getNextIpAddress error: ${e}", e)
             return ServiceResponse.error("Unknown Error Processing Create Record in Bluecat ${e.message}",null,networkPoolIp)
@@ -783,9 +791,22 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                 HttpApiClient.RequestOptions requestOptions = new HttpApiClient.RequestOptions(ignoreSSL: rpcConfig.ignoreSSL)
                 requestOptions.headers = [Authorization: "BAMAuthToken: ${token.token}".toString()]
                 requestOptions.queryParams = [identifier:poolIp.ipAddress, configName: poolIp.networkPool.configuration]
-                ServiceResponse results = client.callJsonApi(apiUrl,apiPath,null,null,requestOptions,'POST')
+                ServiceResponse results = client.callJsonApi(apiUrl,apiPath,null,null,requestOptions,'DELETE')
                 if(results.success) {
                     return ServiceResponse.success(poolIp)
+                } else if(poolIp.externalId) {
+                    log.warn("Error calling deleteDeviceInstance on bluecat, attempting legacy delete if applicable")
+                    requestOptions.queryParams = [objectId: poolIp.externalId]
+                    apiPath = getServicePath(rpcConfig.serviceUrl) + 'delete'
+                    results = client.callJsonApi(apiUrl,apiPath,null,null,requestOptions,'DELETE')
+                    //error
+                    if(results?.success && results?.error != true) {
+                        return ServiceResponse.success(poolIp)
+                    } else {
+                        if(results.content == 'Object was not found') {
+                            return ServiceResponse.success(poolIp)
+                        }
+                    }
                 } else {
                     return ServiceResponse.error(results.error ?: 'Error Deleting Host Record', null, poolIp)
                 }
