@@ -325,7 +325,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                 morpheus.network.updateNetworkPoolServerStatus(poolServer, AccountIntegration.Status.error, 'Bluecat api not reachable')
             }
             Date now = new Date()
-            if(testResults.success) {
+            if(testResults?.success) {
                 String token = tokenResults?.token as String
                 cacheNetworks(bluecatClient,token,poolServer)
                 cacheZones(bluecatClient,token,poolServer)
@@ -1494,7 +1494,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
             Integer start = 0i
             Integer count = 100i
             Integer attempt = 0i
-            while(hasMore == true && attempt < 1000) {
+            while(hasMore && attempt < 1000) {
                 attempt++
                 HttpApiClient.RequestOptions requestOptions = new HttpApiClient.RequestOptions(ignoreSSL: rpcConfig.ignoreSSL)
                 requestOptions.headers = [Authorization: "BAMAuthToken: ${token}".toString()]
@@ -1629,7 +1629,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
         return [
                 new NetworkPoolType(code:'bluecat', name:'Bluecat', creatable:false, description:'Bluecat', rangeSupportsCidr: false),
                 new NetworkPoolType(code:'bluecatipv6', name:'Bluecat IPv6', creatable:false, description:'Bluecat IPv6', rangeSupportsCidr: false)
-        ];
+        ]
     }
 
     /**
@@ -1640,14 +1640,13 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
     List<OptionType> getIntegrationOptionTypes() {
         return [
                 new OptionType(code: 'bluecat.serviceUrl', name: 'Service URL', inputType: OptionType.InputType.TEXT, fieldName: 'serviceUrl', fieldLabel: 'API Url', fieldContext: 'domain', helpBlock: 'Warning! Using HTTP URLS are insecure and not recommended.', displayOrder: 0),
-                new OptionType(code: 'bluecat.credentials', name: 'Credentials', fieldName: 'type', fieldLabel: 'Credentials', fieldContext: 'credential', required: true, displayOrder: 1, defaultValue: 'local',optionSource: 'credentials',config: '{"credentialTypes":["username-password"]}'),
+                new OptionType(code: 'bluecat.credentials', name: 'Credentials', inputType: OptionType.InputType.CREDENTIAL, fieldName: 'type', fieldLabel: 'Credentials', fieldContext: 'credential', required: true, displayOrder: 1, defaultValue: 'local',optionSource: 'credentials',config: '{"credentialTypes":["username-password"]}'),
                 new OptionType(code: 'bluecat.serviceUsername', name: 'Service Username', inputType: OptionType.InputType.TEXT, fieldName: 'serviceUsername', fieldLabel: 'Username', fieldContext: 'domain', displayOrder: 2, localCredential: true),
                 new OptionType(code: 'bluecat.servicePassword', name: 'Service Password', inputType: OptionType.InputType.PASSWORD, fieldName: 'servicePassword', fieldLabel: 'Password', fieldContext: 'domain', displayOrder: 3, localCredential: true),
                 new OptionType(code: 'bluecat.throttleRate', name: 'Throttle Rate', inputType: OptionType.InputType.NUMBER, defaultValue: 0, fieldName: 'serviceThrottleRate', fieldLabel: 'Throttle Rate', fieldContext: 'domain', displayOrder: 4),
                 new OptionType(code: 'bluecat.ignoreSsl', name: 'Ignore SSL', inputType: OptionType.InputType.CHECKBOX, defaultValue: 0, fieldName: 'ignoreSsl', fieldLabel: 'Disable SSL SNI Verification', fieldContext: 'domain', displayOrder: 5),
                 new OptionType(code: 'bluecat.inventoryExisting', name: 'Inventory Existing', inputType: OptionType.InputType.CHECKBOX, defaultValue: 0, fieldName: 'inventoryExisting', fieldLabel: 'Inventory Existing', fieldContext: 'config', displayOrder: 6),
-                new OptionType(code: 'bluecat.networkFilter', name: 'Network Filter', inputType: OptionType.InputType.TEXT, fieldName: 'networkFilter', fieldLabel: 'Network Filter', fieldContext: 'domain', displayOrder: 7),
-
+                new OptionType(code: 'bluecat.networkFilter', name: 'Network Filter', inputType: OptionType.InputType.TEXT, fieldName: 'networkFilter', fieldLabel: 'Network Filter', fieldContext: 'domain', displayOrder: 7)
         ]
     }
 
