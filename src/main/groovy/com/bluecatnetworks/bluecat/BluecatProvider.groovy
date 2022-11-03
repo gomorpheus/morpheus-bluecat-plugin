@@ -338,7 +338,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
         } catch(e) {
             log.error("refreshNetworkPoolServer error: ${e}", e)
         } finally {
-            if(tokenResults.success) {
+            if(tokenResults?.success) {
                 logout(bluecatClient,rpcConfig,tokenResults.token as String)
             }
             bluecatClient.shutdownClient()
@@ -447,7 +447,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
     def cacheZones(HttpApiClient client, String token, NetworkPoolServer poolServer, Map opts = [:]) {
         try {
             def listResults = collectAllZones(client,token,poolServer,opts)
-
+            log.info("Cache Zone Results: ${listResults?.dump()}")
             if (listResults.success) {
                 List apiItems = listResults.zones as List<Map>
                 Observable<NetworkDomainIdentityProjection> domainRecords = morpheus.network.domain.listIdentityProjections(poolServer.integration.id)
@@ -533,10 +533,10 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
             return morpheus.network.domain.listById(poolIdents.collect{it.id})
         }.flatMap { NetworkDomain domain ->
 
-            def listResults = listZoneRecords(client,token,poolServer,opts + [queryParams:[WHERE:"dnszone_id=${domain.externalId}".toString()]])
+            def listResults = listZoneRecords(client,token,poolServer,[parentId: domain.externalId])
 
             if (listResults.success) {
-                List<Map> apiItems = listResults.data as List<Map>
+                List<Map> apiItems = listResults.records as List<Map>
                 Observable<NetworkDomainRecordIdentityProjection> domainRecords = morpheus.network.domain.record.listIdentityProjections(domain,null)
                 SyncTask<NetworkDomainRecordIdentityProjection, Map, NetworkDomainRecord> syncTask = new SyncTask<NetworkDomainRecordIdentityProjection, Map, NetworkDomainRecord>(domainRecords, apiItems)
                 return syncTask.addMatchFunction {  NetworkDomainRecordIdentityProjection domainObject, Map apiItem ->
@@ -557,10 +557,10 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                     updateMatchedDomainRecords(updateItems)
                 }.observe()
             } else {
-                return Single.just(false)
+                return Single.just(false).toObservable()
             }
         }.doOnError{ e ->
-            log.error("cacheIpRecords error: ${e}", e)
+            log.error("cacheZoneRecords error: ${e}", e)
         }.subscribe()
 
     }
@@ -1379,7 +1379,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                 attempt++
                 HttpApiClient.RequestOptions requestOptions = new HttpApiClient.RequestOptions(ignoreSSL: rpcConfig.ignoreSSL)
                 requestOptions.headers = [Authorization: "BAMAuthToken: ${token}".toString()]
-                requestOptions.queryParams = [type:'GenericRecord', start:start.toString(), count:count.toString(), parentId:opts.parentId?.toString()]
+                requestOptions.queryParams = [type:'View', start:start.toString(), count:count.toString(), parentId:opts.parentId?.toString()]
                 def results = client.callJsonApi(apiUrl,apiPath,null,null,requestOptions,'GET')
 
                 if(results?.success && results?.error != true) {
