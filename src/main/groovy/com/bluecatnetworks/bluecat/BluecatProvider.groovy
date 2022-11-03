@@ -1639,7 +1639,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
     @Override
     List<OptionType> getIntegrationOptionTypes() {
         return [
-                new OptionType(code: 'bluecat.serviceUrl', name: 'Service URL', inputType: OptionType.InputType.TEXT, fieldName: 'serviceUrl', fieldLabel: 'API Url', fieldContext: 'domain', helpBlock: 'Warning! Using HTTP URLS are insecure and not recommended.', displayOrder: 0),
+                new OptionType(code: 'bluecat.serviceUrl', name: 'Service URL', inputType: OptionType.InputType.TEXT, fieldName: 'serviceUrl', fieldLabel: 'API Url', fieldContext: 'domain', helpBlock: 'Warning! Using HTTP URLS are insecure and not recommended.', required:true, displayOrder: 0),
                 new OptionType(code: 'bluecat.credentials', name: 'Credentials', inputType: OptionType.InputType.CREDENTIAL, fieldName: 'type', fieldLabel: 'Credentials', fieldContext: 'credential', required: true, displayOrder: 1, defaultValue: 'local',optionSource: 'credentials',config: '{"credentialTypes":["username-password"]}'),
                 new OptionType(code: 'bluecat.serviceUsername', name: 'Service Username', inputType: OptionType.InputType.TEXT, fieldName: 'serviceUsername', fieldLabel: 'Username', fieldContext: 'domain', displayOrder: 2, localCredential: true),
                 new OptionType(code: 'bluecat.servicePassword', name: 'Service Password', inputType: OptionType.InputType.PASSWORD, fieldName: 'servicePassword', fieldLabel: 'Password', fieldContext: 'domain', displayOrder: 3, localCredential: true),
