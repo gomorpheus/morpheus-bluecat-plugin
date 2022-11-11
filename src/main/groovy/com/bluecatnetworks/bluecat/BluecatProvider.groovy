@@ -40,7 +40,9 @@ import com.morpheusdata.model.projection.NetworkPoolIdentityProjection
 import com.morpheusdata.model.projection.NetworkPoolIpIdentityProjection
 import com.morpheusdata.response.ServiceResponse
 import groovy.util.logging.Slf4j
+import io.reactivex.Completable
 import io.reactivex.Single
+import io.reactivex.schedulers.Schedulers
 import org.apache.commons.net.util.SubnetUtils
 import org.apache.http.entity.ContentType
 import io.reactivex.Observable
@@ -526,43 +528,73 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
         }
     }
 
-
     // Cache Zones methods
-    def cacheZoneRecords(HttpApiClient client, String token, NetworkPoolServer poolServer, Map opts=[:]) {
-        morpheus.network.domain.listIdentityProjections(poolServer.integration.id).buffer(50).flatMap { Collection<NetworkDomainIdentityProjection> poolIdents ->
-            return morpheus.network.domain.listById(poolIdents.collect{it.id})
-        }.flatMap { NetworkDomain domain ->
-
+    def cacheZoneRecords(HttpApiClient client, String token, NetworkPoolServer poolServer) {
+        morpheus.network.domain.listIdentityProjections(poolServer.integration.id).flatMap {NetworkDomainIdentityProjection domain ->
+            Completable.mergeArray(
+                    cacheZoneDomainRecords(client,token,poolServer, domain),
+                    cacheZoneAliasRecords(client,token,poolServer, domain)
+            ).toObservable().subscribeOn(Schedulers.io())
+        }.doOnError{ e ->
+            log.error("cacheZoneRecords error: ${e}", e)
+        }.subscribe()
+    }
+    // Cache Zones methods
+    Completable cacheZoneDomainRecords(HttpApiClient client, String token, NetworkPoolServer poolServer, NetworkDomainIdentityProjection domain) {
             def listResults = listZoneRecords(client,token,poolServer,[parentId: domain.externalId])
 
             if (listResults.success) {
                 List<Map> apiItems = listResults.records as List<Map>
-                Observable<NetworkDomainRecordIdentityProjection> domainRecords = morpheus.network.domain.record.listIdentityProjections(domain,null)
+                Observable<NetworkDomainRecordIdentityProjection> domainRecords = morpheus.network.domain.record.listIdentityProjections(domain,'A')
                 SyncTask<NetworkDomainRecordIdentityProjection, Map, NetworkDomainRecord> syncTask = new SyncTask<NetworkDomainRecordIdentityProjection, Map, NetworkDomainRecord>(domainRecords, apiItems)
-                return syncTask.addMatchFunction {  NetworkDomainRecordIdentityProjection domainObject, Map apiItem ->
+                syncTask.addMatchFunction {  NetworkDomainRecordIdentityProjection domainObject, Map apiItem ->
                     domainObject.externalId == apiItem.id?.toString()
                 }.onDelete {removeItems ->
                     morpheus.network.domain.record.remove(domain, removeItems).blockingGet()
                 }.onAdd { itemsToAdd ->
                     addMissingDomainRecords(domain, itemsToAdd)
                 }.withLoadObjectDetails { List<SyncTask.UpdateItemDto<NetworkDomainRecordIdentityProjection,Map>> updateItems ->
-
                     Map<Long, SyncTask.UpdateItemDto<NetworkDomainRecordIdentityProjection, Map>> updateItemMap = updateItems.collectEntries { [(it.existingItem.id): it]}
                     return morpheus.network.domain.record.listById(updateItems.collect{it.existingItem.id} as Collection<Long>).map { NetworkDomainRecord domainRecord ->
                         SyncTask.UpdateItemDto<NetworkDomainRecordIdentityProjection, Map> matchItem = updateItemMap[domainRecord.id]
                         return new SyncTask.UpdateItem<NetworkDomainRecord,Map>(existingItem:domainRecord, masterItem:matchItem.masterItem)
                     }
-
                 }.onUpdate { List<SyncTask.UpdateItem<NetworkDomainRecord,Map>> updateItems ->
                     updateMatchedDomainRecords(updateItems)
-                }.observe()
+                }
+                return Completable.fromObservable(syncTask.observe())
             } else {
-                return Single.just(false).toObservable()
+                return Completable.complete()
             }
-        }.doOnError{ e ->
-            log.error("cacheZoneRecords error: ${e}", e)
-        }.subscribe()
+    }
 
+    // Cache Zones methods
+    Completable cacheZoneAliasRecords(HttpApiClient client, String token, NetworkPoolServer poolServer, NetworkDomainIdentityProjection domain) {
+        def listResults = listZoneCnameRecords(client,token,poolServer,[parentId: domain.externalId])
+
+        if (listResults.success) {
+            List<Map> apiItems = listResults.records as List<Map>
+            Observable<NetworkDomainRecordIdentityProjection> domainRecords = morpheus.network.domain.record.listIdentityProjections(domain,'CNAME')
+            SyncTask<NetworkDomainRecordIdentityProjection, Map, NetworkDomainRecord> syncTask = new SyncTask<NetworkDomainRecordIdentityProjection, Map, NetworkDomainRecord>(domainRecords, apiItems)
+            syncTask.addMatchFunction {  NetworkDomainRecordIdentityProjection domainObject, Map apiItem ->
+                domainObject.externalId == apiItem.id?.toString()
+            }.onDelete {removeItems ->
+                morpheus.network.domain.record.remove(domain, removeItems).blockingGet()
+            }.onAdd { itemsToAdd ->
+                addMissingDomainAliasRecords(domain, itemsToAdd)
+            }.withLoadObjectDetails { List<SyncTask.UpdateItemDto<NetworkDomainRecordIdentityProjection,Map>> updateItems ->
+                Map<Long, SyncTask.UpdateItemDto<NetworkDomainRecordIdentityProjection, Map>> updateItemMap = updateItems.collectEntries { [(it.existingItem.id): it]}
+                return morpheus.network.domain.record.listById(updateItems.collect{it.existingItem.id} as Collection<Long>).map { NetworkDomainRecord domainRecord ->
+                    SyncTask.UpdateItemDto<NetworkDomainRecordIdentityProjection, Map> matchItem = updateItemMap[domainRecord.id]
+                    return new SyncTask.UpdateItem<NetworkDomainRecord,Map>(existingItem:domainRecord, masterItem:matchItem.masterItem)
+                }
+            }.onUpdate { List<SyncTask.UpdateItem<NetworkDomainRecord,Map>> updateItems ->
+                updateMatchedDomainAliasRecords(updateItems)
+            }
+            return Completable.fromObservable(syncTask.observe())
+        } else {
+            return Completable.complete()
+        }
     }
 
 
@@ -594,12 +626,49 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
 
         addList?.each {
             def extraProps = extractNetworkProperties(it.properties)
-            def addConfig = [networkDomain: domain, externalId:it.id, name: extraProps.absoluteName ?: it.name, fqdn:NetworkUtility.getFqdnDomainName(extraProps.absoluteName ?: it.name), type: extraProps.type, source: 'sync']
+            def addConfig = [networkDomain: new NetworkDomain(id: domain.id), externalId:it.id, name: extraProps.absoluteName ?: it.name, fqdn:NetworkUtility.getFqdnDomainName(extraProps.absoluteName ?: it.name), type: 'A', source: 'sync']
             def newObj = new NetworkDomainRecord(addConfig)
             newObj.setContent(extraProps.rdata)
             records.add(newObj)
         }
         morpheus.network.domain.record.create(domain,records).blockingGet()
+    }
+
+
+    void addMissingDomainAliasRecords(NetworkDomainIdentityProjection domain, Collection<Map> addList) {
+        List<NetworkDomainRecord> records = []
+
+        addList?.each {
+            def extraProps = extractNetworkProperties(it.properties)
+            def addConfig = [networkDomain: new NetworkDomain(id: domain.id), externalId:it.id, name: extraProps.absoluteName ?: it.name, fqdn:NetworkUtility.getFqdnDomainName(extraProps.absoluteName ?: it.name), type: 'CNAME', source: 'sync']
+            def newObj = new NetworkDomainRecord(addConfig)
+            newObj.setContent(extraProps.linkedRecordName)
+            records.add(newObj)
+        }
+        morpheus.network.domain.record.create(domain,records).blockingGet()
+    }
+
+    void updateMatchedDomainAliasRecords(List<SyncTask.UpdateItem<NetworkDomainRecord, Map>> updateList) {
+        def records = []
+        updateList?.each { update ->
+            NetworkDomainRecord existingItem = update.existingItem
+            def extraProps = extractNetworkProperties(update.masterItem.properties)
+            if(existingItem) {
+                //update view ?
+                def save = false
+                if(existingItem.content != extraProps.linkedRecordName) {
+                    existingItem.setContent(extraProps.linkedRecordName)
+                    save = true
+                }
+
+                if(save) {
+                    records.add(existingItem)
+                }
+            }
+        }
+        if(records.size() > 0) {
+            morpheus.network.domain.record.save(records).blockingGet()
+        }
     }
 
 
@@ -658,7 +727,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                 def hostInfo
                 def viewName = null
                 if(networkPool.dnsSearchPath) {
-                    def viewobjresults = getEntity(poolServer,networkPool.dnsSearchPath.toLong(),[:])
+                    def viewobjresults = getEntity(client,token.token as String,poolServer,networkPool.dnsSearchPath.toLong(),[:])
                     if(!viewobjresults.success) {
                         log.warn("Error obtaining default view information for selected pool ${networkPool.name} -- viewId: ${networkPool.dnsSearchPath}")
                     } else {
@@ -707,8 +776,6 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                             networkPoolIp.externalId = results.data.id
                         }
                         if(!hostname.endsWith('localdomain') && hostname.contains('.') && createARecord != false) {
-                            def domainRecord = new NetworkDomainRecord(networkDomain: domain, networkPoolIp: networkPoolIp, name: hostname, fqdn: hostname, source: 'user', type: 'HOST', externalId: networkPoolIp.externalId)
-                            morpheus.network.domain.record.create(domainRecord).blockingGet()
                             networkPoolIp.domain = domain
 
                         }
@@ -717,6 +784,12 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                         } else {
                             networkPoolIp = morpheus.network.pool.poolIp.create(networkPoolIp)?.blockingGet()
                         }
+                        if(!hostname.endsWith('localdomain') && hostname.contains('.') && createARecord != false) {
+                            def domainRecord = new NetworkDomainRecord(networkDomain: domain, networkPoolIp: networkPoolIp, name: hostname, fqdn: hostname, source: 'user', type: 'HOST', externalId: networkPoolIp.externalId)
+                            morpheus.network.domain.record.create(domainRecord).blockingGet()
+                        }
+
+
                         return ServiceResponse.success(networkPoolIp)
 
                     } else {
@@ -740,6 +813,10 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                         networkPoolIp = morpheus.network.pool.poolIp.save(networkPoolIp)?.blockingGet()
                     } else {
                         networkPoolIp = morpheus.network.pool.poolIp.create(networkPoolIp)?.blockingGet()
+                    }
+                    if(!hostname.endsWith('localdomain') && hostname.contains('.') && createARecord != false) {
+                        def domainRecord = new NetworkDomainRecord(networkDomain: domain, networkPoolIp: networkPoolIp, name: hostname, fqdn: hostname, source: 'user', type: 'HOST', externalId: networkPoolIp.externalId)
+                        morpheus.network.domain.record.create(domainRecord).blockingGet()
                     }
                     return ServiceResponse.success(networkPoolIp)
                 }
@@ -828,7 +905,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
         def rtn = [success:false, configurations:[], blocks:[], networks:[],views:[]]
         try {
             filterList?.each { filterItem ->
-                def entityResults = getEntity(client,token, poolServer, filterItem, opts)
+                    def entityResults = getEntity(client,token, poolServer, filterItem, opts)
                 if(entityResults.success == true) {
                     def entity = entityResults.entity
                     def type = entity.type
@@ -1627,8 +1704,8 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
     @Override
     Collection<NetworkPoolType> getNetworkPoolTypes() {
         return [
-                new NetworkPoolType(code:'bluecat', name:'Bluecat', creatable:false, description:'Bluecat', rangeSupportsCidr: false),
-                new NetworkPoolType(code:'bluecatipv6', name:'Bluecat IPv6', creatable:false, description:'Bluecat IPv6', rangeSupportsCidr: false)
+                new NetworkPoolType(code:'bluecat', name:'Bluecat', creatable:false, description:'Bluecat', rangeSupportsCidr: false, hostRecordEditable: false),
+                new NetworkPoolType(code:'bluecatipv6', name:'Bluecat IPv6', creatable:false, description:'Bluecat IPv6', rangeSupportsCidr: false, hostRecordEditable: false)
         ]
     }
 
