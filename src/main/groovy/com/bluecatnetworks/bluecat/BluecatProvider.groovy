@@ -786,6 +786,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                         }
                         if(!hostname.endsWith('localdomain') && hostname.contains('.') && createARecord != false) {
                             def domainRecord = new NetworkDomainRecord(networkDomain: domain, networkPoolIp: networkPoolIp, name: hostname, fqdn: hostname, source: 'user', type: 'HOST', externalId: networkPoolIp.externalId)
+                            domainRecord.setContent(networkPoolIp.ipAddress)
                             morpheus.network.domain.record.create(domainRecord).blockingGet()
                         }
 
@@ -816,6 +817,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                     }
                     if(!hostname.endsWith('localdomain') && hostname.contains('.') && createARecord != false) {
                         def domainRecord = new NetworkDomainRecord(networkDomain: domain, networkPoolIp: networkPoolIp, name: hostname, fqdn: hostname, source: 'user', type: 'HOST', externalId: networkPoolIp.externalId)
+                        domainRecord.setContent(networkPoolIp.ipAddress)
                         morpheus.network.domain.record.create(domainRecord).blockingGet()
                     }
                     return ServiceResponse.success(networkPoolIp)
