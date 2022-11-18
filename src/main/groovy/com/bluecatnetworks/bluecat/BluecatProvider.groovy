@@ -96,11 +96,11 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                     String apiUrl = cleanServiceUrl(rpcConfig.serviceUrl)
                     switch(record.type) {
                         case 'CNAME':
-                            apiQuery = [absoluteName:fqdn, viewId:record.networkDomain.internalId,linkedRecordName: record.content, ttl:record.ttl.toString(), type:record.type] as Map<String,String>
+                            apiQuery = [absoluteName:fqdn, viewId:record.networkDomain.internalId,linkedRecordName: record.content, ttl:record.ttl?.toString(), type:record.type] as Map<String,String>
                             apiPath = getServicePath(rpcConfig.serviceUrl) + 'addAliasRecord'
                             break
                         default:
-                            apiQuery = [absoluteName:fqdn, viewId:record.networkDomain.internalId,rdata: record.content, ttl:record.ttl, type:record.type]
+                            apiQuery = [absoluteName:fqdn, viewId:record.networkDomain.internalId,rdata: record.content, ttl:record.ttl?.toString(), type:record.type]
                             apiPath = getServicePath(rpcConfig.serviceUrl) + 'addGenericRecord'
                     }
 
@@ -759,7 +759,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                     apiPath = getServicePath(rpcConfig.serviceUrl) + 'assignNextAvailableIP4Address'
                     // time to dry without dns
                     if(networkPoolIp.ipAddress) {
-                        apiQuery.ip4Address = networkPoolIp.ipAddress
+                        requestOptions.queryParams.ip4Address = networkPoolIp.ipAddress
                         apiPath = getServicePath(rpcConfig.serviceUrl) + 'assignIP4Address'
                     }
                     log.warn("unable to allocate DNS records for bluecat IPAM. Attempting simple ip allocation instead.")
