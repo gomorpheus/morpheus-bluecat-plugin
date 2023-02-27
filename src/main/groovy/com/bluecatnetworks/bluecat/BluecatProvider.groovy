@@ -205,7 +205,26 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
     @Override
     ServiceResponse verifyNetworkPoolServer(NetworkPoolServer poolServer, Map opts) {
         ServiceResponse<NetworkPoolServer> rtn = ServiceResponse.error()
+        rtn.errors = [:]
+        if(!poolServer.name || poolServer.name == ''){
+            rtn.errors['name'] = 'name is required'
+        }
+        if(!poolServer.serviceUrl || poolServer.serviceUrl == ''){
+            rtn.errors['serviceUrl'] = 'Bluecat API URL is required'
+        }
+
+        if((!poolServer.serviceUsername || poolServer.serviceUsername == '') && (!poolServer.credentialData?.username || poolServer.credentialData?.username == '')){
+            rtn.errors['serviceUsername'] = 'username is required'
+        }
+        if((!poolServer.servicePassword || poolServer.servicePassword == '') && (!poolServer.credentialData?.password || poolServer.credentialData?.password == '')){
+            rtn.errors['servicePassword'] = 'password is required'
+        }
+
         rtn.data = poolServer
+        if(rtn.errors.size() > 0){
+            rtn.success = false
+            return rtn //
+        }
         def rpcConfig = getRpcConfig(poolServer)
         HttpApiClient bluecatClient = new HttpApiClient()
         def tokenResults
@@ -1720,8 +1739,8 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
         return [
                 new OptionType(code: 'bluecat.serviceUrl', name: 'Service URL', inputType: OptionType.InputType.TEXT, fieldName: 'serviceUrl', fieldLabel: 'API Url', fieldContext: 'domain', helpBlock: 'Warning! Using HTTP URLS are insecure and not recommended.', required:true, displayOrder: 0),
                 new OptionType(code: 'bluecat.credentials', name: 'Credentials', inputType: OptionType.InputType.CREDENTIAL, fieldName: 'type', fieldLabel: 'Credentials', fieldContext: 'credential', required: true, displayOrder: 1, defaultValue: 'local',optionSource: 'credentials',config: '{"credentialTypes":["username-password"]}'),
-                new OptionType(code: 'bluecat.serviceUsername', name: 'Service Username', inputType: OptionType.InputType.TEXT, fieldName: 'serviceUsername', fieldLabel: 'Username', fieldContext: 'domain', displayOrder: 2, localCredential: true),
-                new OptionType(code: 'bluecat.servicePassword', name: 'Service Password', inputType: OptionType.InputType.PASSWORD, fieldName: 'servicePassword', fieldLabel: 'Password', fieldContext: 'domain', displayOrder: 3, localCredential: true),
+                new OptionType(code: 'bluecat.serviceUsername', name: 'Service Username', inputType: OptionType.InputType.TEXT, fieldName: 'serviceUsername', fieldLabel: 'Username', fieldContext: 'domain', displayOrder: 2, localCredential: true, required:true),
+                new OptionType(code: 'bluecat.servicePassword', name: 'Service Password', inputType: OptionType.InputType.PASSWORD, fieldName: 'servicePassword', fieldLabel: 'Password', fieldContext: 'domain', displayOrder: 3, localCredential: true, required:true),
                 new OptionType(code: 'bluecat.throttleRate', name: 'Throttle Rate', inputType: OptionType.InputType.NUMBER, defaultValue: 0, fieldName: 'serviceThrottleRate', fieldLabel: 'Throttle Rate', fieldContext: 'domain', displayOrder: 4),
                 new OptionType(code: 'bluecat.ignoreSsl', name: 'Ignore SSL', inputType: OptionType.InputType.CHECKBOX, defaultValue: 0, fieldName: 'ignoreSsl', fieldLabel: 'Disable SSL SNI Verification', fieldContext: 'domain', displayOrder: 5),
                 new OptionType(code: 'bluecat.inventoryExisting', name: 'Inventory Existing', inputType: OptionType.InputType.CHECKBOX, defaultValue: 0, fieldName: 'inventoryExisting', fieldLabel: 'Inventory Existing', fieldContext: 'config', displayOrder: 6),
