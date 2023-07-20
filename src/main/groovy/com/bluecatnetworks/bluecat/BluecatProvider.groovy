@@ -90,6 +90,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                 }
                 def apiPath
                 def properties
+                def extraProperties
 
                 Map<String,String> apiQuery
                 rpcConfig = getRpcConfig(poolServer)
@@ -773,10 +774,12 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                 if(!results.success || results.error) {
                     if(!hostname.endsWith('localdomain') && hostname.contains('.') && createARecord != false) {
                         hostInfo = "${hostname},${networkPool.dnsSearchPath ? networkPool.dnsSearchPath : ''},true,false".toString()  //hostname,viewId,reverseFlag,sameAsZoneFlag
+                        properties = "${networkPool.dnsSearchPath ? networkPool.dnsSearchPath : ''},${hostname}|name=${hostname.tokenize('.')[0]}|${extraProperties}".toString()
                     } else {
                         hostInfo = "${hostname}".toString()  //hostname,viewId,reverseFlag,sameAsZoneFlag
+                        properties = "${hostname}|name=${hostname}|${extraProperties}".toString()
                     }
-                    requestOptions.queryParams = [parentId:networkPool.externalId, macAddress:'', configurationId:networkPool.internalId, action:'MAKE_STATIC', hostInfo:hostInfo, properties:extraProperties]
+                    requestOptions.queryParams = [parentId:networkPool.externalId, macAddress:'', configurationId:networkPool.internalId, action:'MAKE_STATIC', hostInfo:hostInfo, properties:properties]
                     apiPath = getServicePath(rpcConfig.serviceUrl) + 'assignNextAvailableIP4Address'
                     // time to dry without dns
                     if(networkPoolIp.ipAddress) {
@@ -1745,9 +1748,9 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                 new OptionType(code: 'bluecat.servicePassword', name: 'Service Password', inputType: OptionType.InputType.PASSWORD, fieldName: 'servicePassword', fieldLabel: 'Password', fieldContext: 'domain', displayOrder: 3, localCredential: true, required:true),
                 new OptionType(code: 'bluecat.throttleRate', name: 'Throttle Rate', inputType: OptionType.InputType.NUMBER, defaultValue: 0, fieldName: 'serviceThrottleRate', fieldLabel: 'Throttle Rate', fieldContext: 'domain', displayOrder: 4),
                 new OptionType(code: 'bluecat.ignoreSsl', name: 'Ignore SSL', inputType: OptionType.InputType.CHECKBOX, defaultValue: 0, fieldName: 'ignoreSsl', fieldLabel: 'Disable SSL SNI Verification', fieldContext: 'domain', displayOrder: 5),
-                new OptionType(code: 'bluecat.inventoryExisting', name: 'Inventory Existing', inputType: OptionType.InputType.CHECKBOX, defaultValue: 0, fieldName: 'inventoryExisting', fieldLabel: 'Inventory Existing', fiedContext: 'config', displayOrder: 6),
+                new OptionType(code: 'bluecat.inventoryExisting', name: 'Inventory Existing', inputType: OptionType.InputType.CHECKBOX, defaultValue: 0, fieldName: 'inventoryExisting', fieldLabel: 'Inventory Existing', fieldContext: 'config', displayOrder: 6),
                 new OptionType(code: 'bluecat.networkFilter', name: 'Network Filter', inputType: OptionType.InputType.TEXT, fieldName: 'networkFilter', fieldLabel: 'Network Filter', fieldContext: 'domain', displayOrder: 7),
-                new OptionType(code: 'bluecat.extraProperties', name: 'Extra Properties', inputType: OptionType.InputType.TEXT, fieldName: 'extraProperties', fieldLabel: 'Extra Attributes', fieldContext: 'config', displayOrder: 11, helpText: "key=value|key2=value2")
+                new OptionType(code: 'bluecat.extraProperties', name: 'Extra Properties', inputType: OptionType.InputType.TEXT, fieldName: 'extraProperties', fieldLabel: 'Extra Properties', fieldContext: 'config', displayOrder: 8, helpText: "key=value|key2=value2")
         ]
     }
 
