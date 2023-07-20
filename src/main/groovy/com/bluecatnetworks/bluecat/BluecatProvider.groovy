@@ -774,12 +774,12 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                 if(!results.success || results.error) {
                     if(!hostname.endsWith('localdomain') && hostname.contains('.') && createARecord != false) {
                         hostInfo = "${hostname},${networkPool.dnsSearchPath ? networkPool.dnsSearchPath : ''},true,false".toString()  //hostname,viewId,reverseFlag,sameAsZoneFlag
-                        properties = "${networkPool.dnsSearchPath ? networkPool.dnsSearchPath : ''},${hostname}|name=${hostname.tokenize('.')[0]}|${extraProperties}".toString()
+                        extraProperties = "${networkPool.dnsSearchPath ? networkPool.dnsSearchPath : ''},${hostname}|name=${hostname.tokenize('.')[0]}|${extraProperties}".toString()
                     } else {
                         hostInfo = "${hostname}".toString()  //hostname,viewId,reverseFlag,sameAsZoneFlag
-                        properties = "${hostname}|name=${hostname}|${extraProperties}".toString()
+                        extraProperties = "${hostname}|name=${hostname}|${extraProperties}".toString()
                     }
-                    requestOptions.queryParams = [parentId:networkPool.externalId, macAddress:'', configurationId:networkPool.internalId, action:'MAKE_STATIC', hostInfo:hostInfo, properties:properties]
+                    requestOptions.queryParams = [parentId:networkPool.externalId, macAddress:'', configurationId:networkPool.internalId, action:'MAKE_STATIC', hostInfo:hostInfo, properties:extraProperties]
                     apiPath = getServicePath(rpcConfig.serviceUrl) + 'assignNextAvailableIP4Address'
                     // time to dry without dns
                     if(networkPoolIp.ipAddress) {
