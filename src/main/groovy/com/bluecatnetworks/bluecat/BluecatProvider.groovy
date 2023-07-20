@@ -91,6 +91,9 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                 def apiPath
                 def properties
                 def extraProperties
+                if(poolServer.configMap?.extraProperties) {
+					extraProperties = poolServer.configMap?.extraProperties
+				}
 
                 Map<String,String> apiQuery
                 rpcConfig = getRpcConfig(poolServer)
@@ -735,6 +738,11 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
         HttpApiClient client = new HttpApiClient();
         def rpcConfig = getRpcConfig(poolServer)
         def token
+
+        def extraProperties
+        if(poolServer.configMap?.extraProperties) {
+            extraProperties = poolServer.configMap?.extraProperties
+        }
 
         try {
             token = login(client,rpcConfig)
