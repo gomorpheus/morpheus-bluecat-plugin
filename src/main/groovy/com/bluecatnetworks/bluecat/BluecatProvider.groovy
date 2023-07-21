@@ -100,13 +100,18 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                 token = login(client,rpcConfig)
                 if(token.success) {
                     String apiUrl = cleanServiceUrl(rpcConfig.serviceUrl)
+                    if(!hostname.endsWith('localdomain') && hostname.contains('.') && createARecord != false) {
+                        extraProperties = "${networkPool.dnsSearchPath ? networkPool.dnsSearchPath : ''},${hostname}|name=${hostname.tokenize('.')[0]}|${extraProperties}|".toString()
+                    } else {
+                        extraProperties = "${hostname}|name=${hostname}|${extraProperties}|".toString()
+                    }
                     switch(record.type) {
                         case 'CNAME':
-                            apiQuery = [absoluteName:fqdn, viewId:record.networkDomain.internalId,linkedRecordName: record.content, ttl:record.ttl?.toString(), type:record.type] as Map<String,String>
+                            apiQuery = [absoluteName:fqdn, viewId:record.networkDomain.internalId,linkedRecordName: record.content, ttl:record.ttl?.toString(), type:record.type,properties:extraProperties] as Map<String,String>
                             apiPath = getServicePath(rpcConfig.serviceUrl) + 'addAliasRecord'
                             break
                         default:
-                            apiQuery = [absoluteName:fqdn, viewId:record.networkDomain.internalId,rdata: record.content, ttl:record.ttl?.toString(), type:record.type]
+                            apiQuery = [absoluteName:fqdn, viewId:record.networkDomain.internalId,rdata: record.content, ttl:record.ttl?.toString(), type:record.type,properties:extraProperties]
                             apiPath = getServicePath(rpcConfig.serviceUrl) + 'addGenericRecord'
                     }
 
@@ -782,10 +787,10 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                 if(!results.success || results.error) {
                     if(!hostname.endsWith('localdomain') && hostname.contains('.') && createARecord != false) {
                         hostInfo = "${hostname},${networkPool.dnsSearchPath ? networkPool.dnsSearchPath : ''},true,false".toString()  //hostname,viewId,reverseFlag,sameAsZoneFlag
-                        extraProperties = "${networkPool.dnsSearchPath ? networkPool.dnsSearchPath : ''},${hostname}|name=${hostname.tokenize('.')[0]}|${extraProperties}".toString()
+                        extraProperties = "${networkPool.dnsSearchPath ? networkPool.dnsSearchPath : ''},${hostname}|name=${hostname.tokenize('.')[0]}|${extraProperties}|".toString()
                     } else {
                         hostInfo = "${hostname}".toString()  //hostname,viewId,reverseFlag,sameAsZoneFlag
-                        extraProperties = "${hostname}|name=${hostname}|${extraProperties}".toString()
+                        extraProperties = "${hostname}|name=${hostname}|${extraProperties}|".toString()
                     }
                     requestOptions.queryParams = [parentId:networkPool.externalId, macAddress:'', configurationId:networkPool.internalId, action:'MAKE_STATIC', hostInfo:hostInfo, properties:extraProperties]
                     apiPath = getServicePath(rpcConfig.serviceUrl) + 'assignNextAvailableIP4Address'
