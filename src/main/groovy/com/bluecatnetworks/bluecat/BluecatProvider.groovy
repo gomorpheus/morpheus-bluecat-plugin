@@ -758,8 +758,6 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                 def hostname = networkPoolIp.hostname
                 if(domain && hostname && !hostname.endsWith(domain.name))  {
                     hostname = "${hostname}.${domain.name}"
-                } else {
-                    hostname = hostname.tokenize('.')[0]
                 }
 
                 def apiUrl = cleanServiceUrl(rpcConfig.serviceUrl)
@@ -790,6 +788,9 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                 // requestOptions.headers = [Authorization: "BAMAuthToken: ${token.token}".toString()]
                 // def results = client.callJsonApi(apiUrl,apiPath,null,null,requestOptions, 'POST')
                 // if(!results.success || results.error) {
+                
+                HttpApiClient.RequestOptions requestOptions = new HttpApiClient.RequestOptions(ignoreSSL: rpcConfig.ignoreSSL)
+                requestOptions.headers = [Authorization: "BAMAuthToken: ${token.token}".toString()]
                 
                 if(!hostname.endsWith('localdomain') && hostname.contains('.') && createARecord != false) {
                     hostInfo = "${hostname},${networkPool.dnsSearchPath ? networkPool.dnsSearchPath : ''},true,false".toString()  //hostname,viewId,reverseFlag,sameAsZoneFlag
