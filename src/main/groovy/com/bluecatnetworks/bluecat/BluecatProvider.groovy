@@ -102,7 +102,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                     String apiUrl = cleanServiceUrl(rpcConfig.serviceUrl)
                     extraProperties = "${fqdn}|name=${fqdn}|${extraProperties}|".toString()
                     if(!record.type) {
-                        hostInfo = "${fqdn}".toString()
+                        hostInfo = "${fqdn.tokenize('.')[0]}".toString()
                         extraProperties = "name=${fqdn}|${extraProperties}|".toString()
                         apiQuery = [parentId:networkPool.externalId, macAddress:'', configurationId:networkPool.internalId, action:'MAKE_STATIC', hostInfo:hostInfo, properties:extraProperties]
                         apiPath = getServicePath(rpcConfig.serviceUrl) + 'assignIP4Address'
