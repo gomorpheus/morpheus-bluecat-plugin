@@ -773,22 +773,6 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                     }
                 }
 
-                // def apiQuery = [configName: networkPool.configuration, ipAddressMode: 'REQUEST_STATIC', ipEntity: networkPool.cidr]
-                // if(networkPoolIp.ipAddress) {
-                //     apiQuery.ipAddressMode = 'PASS_VALUE'
-                //     apiQuery.ipEntity = networkPoolIp.ipAddress
-                // }
-                // if(!hostname.endsWith('localdomain') && hostname.contains('.') && createARecord != false) {
-                //     apiQuery.zoneName = hostname.split(/\./)[1..-1].join('.')
-                //     apiQuery.recordName = hostname
-                //     apiQuery.viewName = viewName
-                // }
-                // HttpApiClient.RequestOptions requestOptions = new HttpApiClient.RequestOptions(ignoreSSL: rpcConfig.ignoreSSL)
-                // requestOptions.queryParams = apiQuery as Map<String,String>
-                // requestOptions.headers = [Authorization: "BAMAuthToken: ${token.token}".toString()]
-                // def results = client.callJsonApi(apiUrl,apiPath,null,null,requestOptions, 'POST')
-                // if(!results.success || results.error) {
-                
                 HttpApiClient.RequestOptions requestOptions = new HttpApiClient.RequestOptions(ignoreSSL: rpcConfig.ignoreSSL)
                 requestOptions.headers = [Authorization: "BAMAuthToken: ${token.token}".toString()]
                 
@@ -841,31 +825,6 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                     log.info("API Call Failed to allocate IP Address {}",results)
                     return ServiceResponse.error("API Call Failed to allocate IP Address ${results}",null,networkPoolIp)
                 }
-                // } else {
-                //     def extraProps = extractNetworkProperties(results.data)
-                //     networkPoolIp.ipAddress = extraProps.ip
-                //     networkPoolIp.externalId = extraProps.id
-                //     if(!hostname.endsWith('localdomain') && hostname.contains('.') && createARecord != false) {
-                //         if (createARecord && domain) {
-                //             def domainRecord = new NetworkDomainRecord(networkDomain: domain,ttl:3600, networkPoolIp: networkPoolIp, name: hostname, fqdn: hostname, source: 'user', type: 'A',content: networkPoolIp.ipAddress)
-                //             morpheus.network.domain.record.create(domainRecord).blockingGet()
-                //         }
-                //     }
-                //     if(createARecord) {
-                //         networkPoolIp.domain = domain
-                //     }
-                //     if (networkPoolIp.id) {
-                //         networkPoolIp = morpheus.network.pool.poolIp.save(networkPoolIp)?.blockingGet()
-                //     } else {
-                //         networkPoolIp = morpheus.network.pool.poolIp.create(networkPoolIp)?.blockingGet()
-                //     }
-                //     if(!hostname.endsWith('localdomain') && hostname.contains('.') && createARecord != false) {
-                //         def domainRecord = new NetworkDomainRecord(networkDomain: domain, networkPoolIp: networkPoolIp, name: hostname, fqdn: hostname, source: 'user', type: 'HOST', externalId: networkPoolIp.externalId)
-                //         domainRecord.setContent(networkPoolIp.ipAddress)
-                //         morpheus.network.domain.record.create(domainRecord).blockingGet()
-                //     }
-                //     return ServiceResponse.success(networkPoolIp)
-                // }
             } else {
                 return ServiceResponse.error("Error acquiring authentication token for Bluecat integration ${poolServer.name} during host record creation.")
             }
