@@ -100,7 +100,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                 token = login(client,rpcConfig)
                 if(token.success) {
                     String apiUrl = cleanServiceUrl(rpcConfig.serviceUrl)
-                    extraProperties = "${fqdn}|name=${fqdn}|${extraProperties}|".toString()
+                    extraProperties = "${fqdn}|${extraProperties}|".toString()
                     if(!record.type) {
                         hostInfo = "${fqdn.tokenize('.')[0]}".toString()
                         extraProperties = "name=${fqdn}|${extraProperties}|".toString()
