@@ -784,14 +784,25 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                 apiPath = getServicePath(rpcConfig.serviceUrl) + 'assignNextAvailableIP4Address'
                 // time to dry without dns
                 if(networkPoolIp.ipAddress) {
+                    // Make sure it's a valid IP
                     if (inetAddressValidator.isValidInet4Address(networkPoolIp.ipAddress)) {
                         log.info("${networkPoolIp.ipAddress} is a valid IPv4 address.")
                         requestOptions.queryParams.ip4Address = networkPoolIp.ipAddress
                         apiPath = getServicePath(rpcConfig.serviceUrl) + 'assignIP4Address'
                     } else if (inetAddressValidator.isValidInet6Address(networkPoolIp.ipAddress)) {
                         log.info("${networkPoolIp.ipAddress} is a valid IPv6 address.")
-                        requestOptions.queryParams.address = networkPoolIp.ipAddress
-                        apiPath = getServicePath(rpcConfig.serviceUrl) + 'assignIP6Address'
+                        
+                        // Check if IPv6 Address Exists
+                        requestOptions.queryParams = [address:networkPoolIp.ipAddress, containerId:networkPool.internalId]
+                        apiPath = getServicePath(rpcConfig.serviceUrl) + 'getIP6Address'
+                        def results = client.callJsonApi(apiUrl,apiPath,null,null,requestOptions, 'GET')
+                        if(results?.success && results?.error != true) {
+                            requestOptions.queryParams = [action:'MAKE_STATIC', address:networkPoolIp.ipAddress, macAddress:'', containerId: networkPool.internalId, hostInfo:hostInfo, properties:extraProperties]
+                            apiPath = getServicePath(rpcConfig.serviceUrl) + 'assignIP6Address'
+                        } else {
+                            requestOptions.queryParams = [containerId:networkPool.internalId, address:networkPoolIp.ipAddress, name:hostname, type:'IP6Address', properties:extraProperties]
+                            apiPath = getServicePath(rpcConfig.serviceUrl) + 'addIP6Address'
+                        }
                     } else {
                         log.error("Assign IP Address Error: ${e}", e)
                         return ServiceResponse.error("Invalid IP Address Error Processing Create Record in Bluecat ${e.message}",null,networkPoolIp)
