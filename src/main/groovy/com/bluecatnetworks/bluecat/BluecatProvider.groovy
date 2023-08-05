@@ -804,7 +804,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                             apiPath = getServicePath(rpcConfig.serviceUrl) + 'addIP6Address'
                         }
                     } else {
-                        log.error("Assign IP Address Error: ${e}", e)
+                        log.error("Assign IP Address Error: Invalid IP Address ${networkPoolIp.ipAddress}", e)
                         return ServiceResponse.error("Invalid IP Address Error Processing Create Record in Bluecat ${e.message}",null,networkPoolIp)
                     }
                 }
