@@ -80,7 +80,6 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
     ServiceResponse createRecord(AccountIntegration integration, NetworkDomainRecord record, Map opts) {
         ServiceResponse<NetworkDomainRecord> rtn = new ServiceResponse<>()
         HttpApiClient client = new HttpApiClient()
-        InetAddressValidator inetAddressValidator = new InetAddressValidator()
         def poolServer = morpheus.network.getPoolServerByAccountIntegration(integration).blockingGet()
         def token
         def rpcConfig
@@ -93,7 +92,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                 def apiPath
                 def properties
                 def extraProperties
-                def ipAddress = record.content
+
                 if(poolServer.configMap?.extraProperties) {
 					extraProperties = poolServer.configMap?.extraProperties
 				}
@@ -785,9 +784,20 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                 apiPath = getServicePath(rpcConfig.serviceUrl) + 'assignNextAvailableIP4Address'
                 // time to dry without dns
                 if(networkPoolIp.ipAddress) {
-                    requestOptions.queryParams.ip4Address = networkPoolIp.ipAddress
-                    apiPath = getServicePath(rpcConfig.serviceUrl) + 'assignIP4Address'
+                    if (inetAddressValidator.isValidInet4Address(networkPoolIp.ipAddress)) {
+                        log.info("${networkPoolIp.ipAddress} is a valid IPv4 address.")
+                        requestOptions.queryParams.ip4Address = networkPoolIp.ipAddress
+                        apiPath = getServicePath(rpcConfig.serviceUrl) + 'assignIP4Address'
+                    } else if (inetAddressValidator.isValidInet6Address(networkPoolIp.ipAddress)) {
+                        log.info("${networkPoolIp.ipAddress} is a valid IPv6 address.")
+                        requestOptions.queryParams.address = networkPoolIp.ipAddress
+                        apiPath = getServicePath(rpcConfig.serviceUrl) + 'assignIP6Address'
+                    } else {
+                        log.error("Assign IP Address Error: ${e}", e)
+                        return ServiceResponse.error("Invalid IP Address Error Processing Create Record in Bluecat ${e.message}",null,networkPoolIp)
+                    }
                 }
+                
                 log.warn("unable to allocate DNS records for bluecat IPAM. Attempting simple ip allocation instead.")
                 def results = client.callJsonApi(apiUrl,apiPath,null,null,requestOptions, 'POST')
 
