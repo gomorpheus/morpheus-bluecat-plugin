@@ -47,6 +47,7 @@ import org.apache.commons.net.util.SubnetUtils
 import org.apache.http.entity.ContentType
 import io.reactivex.Observable
 import org.apache.tools.ant.types.spi.Service
+import org.apache.commons.validator.routines.InetAddressValidator
 
 /**
  * The IPAM / DNS Provider implementation for Bluecat
