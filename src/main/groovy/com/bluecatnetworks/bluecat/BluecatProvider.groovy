@@ -102,34 +102,17 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                 rpcConfig = getRpcConfig(poolServer)
                 token = login(client,rpcConfig)
                 if(token.success) {
-                    if (inetAddressValidator.isValidInet4Address(ipAddress)) {
-                        log.info("$ipAddress is a valid IPv4 address.")
-                        // Your logic to create a record with a valid IPv4 address
-                    } else if (inetAddressValidator.isValidInet6Address(ipAddress)) {
-                        log.info("$ipAddress is a valid IPv6 address.")
-                        // Your logic to create a record with a valid IPv6 address
-                    } else {
-                        log.info("$ipAddress is an invalid IP address.")
-                        // Your logic to handle an invalid IP address
-                    }
-
                     String apiUrl = cleanServiceUrl(rpcConfig.serviceUrl)
                     extraProperties = "${fqdn}|${extraProperties}|".toString()
-                    if(!record.type) {
-                        hostInfo = "${fqdn.tokenize('.')[0]}".toString()
-                        extraProperties = "name=${fqdn}|${extraProperties}|".toString()
-                        apiQuery = [parentId:networkPool.externalId, macAddress:'', configurationId:networkPool.internalId, action:'MAKE_STATIC', hostInfo:hostInfo, properties:extraProperties]
-                        apiPath = getServicePath(rpcConfig.serviceUrl) + 'assignIP4Address'
-                    } else {
-                        switch(record.type) {
-                            case 'CNAME':
-                                apiQuery = [absoluteName:fqdn, viewId:record.networkDomain.internalId,linkedRecordName: record.content, ttl:record.ttl?.toString(), type:record.type, properties:extraProperties] as Map<String,String>
-                                apiPath = getServicePath(rpcConfig.serviceUrl) + 'addAliasRecord'
-                                break
-                            default:
-                                apiQuery = [absoluteName:fqdn, viewId:record.networkDomain.internalId,rdata: record.content, ttl:record.ttl?.toString(), type:record.type, properties:extraProperties]
-                                apiPath = getServicePath(rpcConfig.serviceUrl) + 'addGenericRecord'
-                        }
+
+                    switch(record.type) {
+                        case 'CNAME':
+                            apiQuery = [absoluteName:fqdn, viewId:record.networkDomain.internalId,linkedRecordName: record.content, ttl:record.ttl?.toString(), type:record.type, properties:extraProperties] as Map<String,String>
+                            apiPath = getServicePath(rpcConfig.serviceUrl) + 'addAliasRecord'
+                            break
+                        default:
+                            apiQuery = [absoluteName:fqdn, viewId:record.networkDomain.internalId,rdata: record.content, ttl:record.ttl?.toString(), type:record.type, properties:extraProperties]
+                            apiPath = getServicePath(rpcConfig.serviceUrl) + 'addGenericRecord'
                     }
 
                     def results = client.callJsonApi(apiUrl,apiPath,new HttpApiClient.RequestOptions(queryParams: apiQuery, headers: [Authorization: "BAMAuthToken: ${token.token}".toString()],ignoreSSL: rpcConfig.ignoreSSL),"POST")
