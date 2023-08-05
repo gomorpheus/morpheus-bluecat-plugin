@@ -193,7 +193,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                             requestOptions.headers = [Authorization: "BAMAuthToken: ${token.token}".toString()]
                             requestOptions.queryParams = [objectId: record.externalId]
                             //we have an A Record to delete
-                            def results = client.callJsonApi(apiUrl, apiPath, poolServer.serviceUsername, poolServer.servicePassword, requestOptions, 'DELETE')
+                            def results = client.callJsonApi(apiUrl, apiPath, null, null, requestOptions, 'DELETE')
                             if (results.success) {
                                 rtn.success = true
                             }
