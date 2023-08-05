@@ -80,6 +80,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
     ServiceResponse createRecord(AccountIntegration integration, NetworkDomainRecord record, Map opts) {
         ServiceResponse<NetworkDomainRecord> rtn = new ServiceResponse<>()
         HttpApiClient client = new HttpApiClient()
+        InetAddressValidator inetAddressValidator = new InetAddressValidator()
         def poolServer = morpheus.network.getPoolServerByAccountIntegration(integration).blockingGet()
         def token
         def rpcConfig
@@ -92,6 +93,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                 def apiPath
                 def properties
                 def extraProperties
+                def ipAddress = record.content
                 if(poolServer.configMap?.extraProperties) {
 					extraProperties = poolServer.configMap?.extraProperties
 				}
@@ -100,6 +102,17 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                 rpcConfig = getRpcConfig(poolServer)
                 token = login(client,rpcConfig)
                 if(token.success) {
+                    if (inetAddressValidator.isValidInet4Address(ipAddress)) {
+                        log.info("$ipAddress is a valid IPv4 address.")
+                        // Your logic to create a record with a valid IPv4 address
+                    } else if (inetAddressValidator.isValidInet6Address(ipAddress)) {
+                        log.info("$ipAddress is a valid IPv6 address.")
+                        // Your logic to create a record with a valid IPv6 address
+                    } else {
+                        log.info("$ipAddress is an invalid IP address.")
+                        // Your logic to handle an invalid IP address
+                    }
+
                     String apiUrl = cleanServiceUrl(rpcConfig.serviceUrl)
                     extraProperties = "${fqdn}|${extraProperties}|".toString()
                     if(!record.type) {
@@ -110,11 +123,11 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                     } else {
                         switch(record.type) {
                             case 'CNAME':
-                                apiQuery = [absoluteName:fqdn, viewId:record.networkDomain.internalId,linkedRecordName: record.content, ttl:record.ttl?.toString(), type:record.type,properties:extraProperties] as Map<String,String>
+                                apiQuery = [absoluteName:fqdn, viewId:record.networkDomain.internalId,linkedRecordName: record.content, ttl:record.ttl?.toString(), type:record.type, properties:extraProperties] as Map<String,String>
                                 apiPath = getServicePath(rpcConfig.serviceUrl) + 'addAliasRecord'
                                 break
                             default:
-                                apiQuery = [absoluteName:fqdn, viewId:record.networkDomain.internalId,rdata: record.content, ttl:record.ttl?.toString(), type:record.type,properties:extraProperties]
+                                apiQuery = [absoluteName:fqdn, viewId:record.networkDomain.internalId,rdata: record.content, ttl:record.ttl?.toString(), type:record.type, properties:extraProperties]
                                 apiPath = getServicePath(rpcConfig.serviceUrl) + 'addGenericRecord'
                         }
                     }
@@ -745,6 +758,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
     @Override
     ServiceResponse createHostRecord(NetworkPoolServer poolServer, NetworkPool networkPool, NetworkPoolIp networkPoolIp, NetworkDomain domain, Boolean createARecord, Boolean createPtrRecord) {
         HttpApiClient client = new HttpApiClient();
+        InetAddressValidator inetAddressValidator = new InetAddressValidator()
         def rpcConfig = getRpcConfig(poolServer)
         def token
 
