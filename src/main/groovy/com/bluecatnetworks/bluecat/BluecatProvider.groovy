@@ -797,7 +797,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                         return ServiceResponse.error("Invalid IP Address Error Processing Create Record in Bluecat ${e.message}",null,networkPoolIp)
                     }
                 }
-                
+
                 log.warn("unable to allocate DNS records for bluecat IPAM. Attempting simple ip allocation instead.")
                 def results = client.callJsonApi(apiUrl,apiPath,null,null,requestOptions, 'POST')
 
@@ -1103,7 +1103,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                             def configuration
                             if(parentResults.parent.type == 'Configuration') {
                                 configuration = parentResults.parent
-                            } else if(type == 'IP4Block') {
+                            } else if(type == 'IP6Block') {
                                 block = parentResults.parent
                                 configuration = findEntityConfiguration(client,token, poolServer, block.id.toLong(), opts, 1)
                             } else {
