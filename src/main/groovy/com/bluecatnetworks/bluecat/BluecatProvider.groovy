@@ -781,35 +781,48 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                     extraProperties = "name=${hostname}|${extraProperties}|".toString()
                 }
                 requestOptions.queryParams = [parentId:networkPool.externalId, macAddress:'', configurationId:networkPool.internalId, action:'MAKE_STATIC', hostInfo:hostInfo, properties:extraProperties]
-                apiPath = getServicePath(rpcConfig.serviceUrl) + 'assignNextAvailableIP4Address'
+                
                 // time to dry without dns
                 if(networkPoolIp.ipAddress) {
                     // Make sure it's a valid IP
                     if (inetAddressValidator.isValidInet4Address(networkPoolIp.ipAddress)) {
-                        log.info("${networkPoolIp.ipAddress} is a valid IPv4 address.")
                         requestOptions.queryParams.ip4Address = networkPoolIp.ipAddress
                         apiPath = getServicePath(rpcConfig.serviceUrl) + 'assignIP4Address'
                     } else if (inetAddressValidator.isValidInet6Address(networkPoolIp.ipAddress)) {
-                        log.info("${networkPoolIp.ipAddress} is a valid IPv6 address.")
-                        
                         // Check if IPv6 Address Exists
                         requestOptions.queryParams = [address:networkPoolIp.ipAddress, containerId:networkPool.internalId]
                         apiPath = getServicePath(rpcConfig.serviceUrl) + 'getIP6Address'
                         def results = client.callJsonApi(apiUrl,apiPath,null,null,requestOptions, 'GET')
-                        if(results?.success && results?.error != true) {
-                            requestOptions.queryParams = [action:'MAKE_STATIC', address:networkPoolIp.ipAddress, macAddress:'', containerId: networkPool.internalId, hostInfo:hostInfo, properties:extraProperties]
-                            apiPath = getServicePath(rpcConfig.serviceUrl) + 'assignIP6Address'
+                        if(results?.success && results?.id != 0) {
+                            log.error("IPv6 Address Already in Use: ${networkPoolIp.ipAddress}", results)
+                            return ServiceResponse.error("IPv6 Address Already in Use: ${networkPoolIp.ipAddress}")
                         } else {
                             requestOptions.queryParams = [containerId:networkPool.internalId, address:networkPoolIp.ipAddress, name:hostname, type:'IP6Address', properties:extraProperties]
                             apiPath = getServicePath(rpcConfig.serviceUrl) + 'addIP6Address'
                         }
                     } else {
-                        log.error("Assign IP Address Error: Invalid IP Address ${networkPoolIp.ipAddress}", e)
-                        return ServiceResponse.error("Invalid IP Address Error Processing Create Record in Bluecat ${e.message}",null,networkPoolIp)
+                        log.error("Assign IP Address Error: Invalid IP Address ${networkPoolIp.ipAddress}", results)
+                        return ServiceResponse.error("Assign IP Address Error: Invalid IP Address ${networkPoolIp.ipAddress}")
                     }
                 }
 
-                log.warn("unable to allocate DNS records for bluecat IPAM. Attempting simple ip allocation instead.")
+                log.info("unable to allocate DNS records for bluecat IPAM. Attempting simple ip allocation instead.")
+                
+                if (networkPool.type == 'bluecat') {
+                    apiPath = getServicePath(rpcConfig.serviceUrl) + 'assignNextAvailableIP4Address'
+                } else if (networkPool.type == 'bluecatipv6') {
+                    apiPath = getServicePath(rpcConfig.serviceUrl) + 'getNextAvailableIP6Address'
+                    requestOptions.queryParams = [parentId:networkPool.internalId]
+                    def results = client.callJsonApi(apiUrl,apiPath,null,null,requestOptions, 'GET')
+                    
+                    if(results?.success && results?.error != true) {
+                        requestOptions.queryParams = [containerId:networkPool.internalId, address:results.replace("\"", ""), name:hostname, type:'IP6Address', properties:extraProperties]
+                        apiPath = getServicePath(rpcConfig.serviceUrl) + 'addIP6Address'
+                    } else {
+                        log.error("Add IPv6 Address to Pool Failed", results)
+                        return ServiceResponse.error("Add IPv6 Address to Pool Failed")
+                    }
+                }
                 def results = client.callJsonApi(apiUrl,apiPath,null,null,requestOptions, 'POST')
 
                 if(results?.success && results?.error != true) {
