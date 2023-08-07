@@ -808,9 +808,9 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
 
                 log.info("unable to allocate DNS records for bluecat IPAM. Attempting simple ip allocation instead.")
                 
-                if (networkPool.type == 'bluecat') {
+                if (networkPool.type.code == 'bluecat') {
                     apiPath = getServicePath(rpcConfig.serviceUrl) + 'assignNextAvailableIP4Address'
-                } else if (networkPool.type == 'bluecatipv6') {
+                } else if (networkPool.type.code == 'bluecatipv6') {
                     apiPath = getServicePath(rpcConfig.serviceUrl) + 'getNextAvailableIP6Address'
                     requestOptions.queryParams = [parentId:networkPool.internalId]
                     def results = client.callJsonApi(apiUrl,apiPath,null,null,requestOptions, 'GET')
