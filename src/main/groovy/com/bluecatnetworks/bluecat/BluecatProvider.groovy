@@ -413,14 +413,20 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
         def poolTypeIpv6 = new NetworkPoolType(code: 'bluecatipv6')
         List<NetworkPool> missingPoolsList = []
         chunkedAddList?.each { Map network ->
+            log.info("NETWORKNETWORK: ${network}")
             def networkProps = extractNetworkProperties(network.properties)
-            String networkCidr = networkProps['CIDR'] as String
+            log.info("NETWORKNETWORKPROPS: ${networkProps}")
+            if (network.type == 'IP4Network') {
+                String networkCidr = networkProps['CIDR'] as String
+            } else {
+                String networkCidr = networkProps['prefix'] as String
+            }
             def defaultViewId = extractDefaultView(network, networkProps,listResults.networks,listResults.blocks,listResults.views)
-            if(networkCidr) {
+            if(networkCidr && network.type == 'IP4Network') {
                 def networkInfo = getNetworkPoolConfig(networkCidr)
 
                 def addConfig = [account:poolServer.account, poolServer:poolServer, owner:poolServer.account, name:network.name ?: networkCidr, externalId:"${network.id}",
-                                 internalId:"${network.configurationId}", cidr: networkCidr, configuration: network.configurationName, type: network.type == 'IP6Network' ? poolTypeIpv6 : poolType, poolEnabled:true, parentType:'NetworkPoolServer', parentId:poolServer.id,
+                                 internalId:"${network.configurationId}", cidr: networkCidr, configuration: network.configurationName, type: poolType, poolEnabled:true, parentType:'NetworkPoolServer', parentId:poolServer.id,
                                  dnsSearchPath:defaultViewId]
                 addConfig += networkInfo.config
                 def newNetworkPool = new NetworkPool(addConfig)
@@ -430,9 +436,15 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                     def addRange = new NetworkPoolRange(rangeConfig)
                     newNetworkPool.ipRanges.add(addRange)
                 }
-                missingPoolsList.add(newNetworkPool)
+            } else if (networkCidr && network.type == 'IP6Network') {
+                def addConfig = [account:poolServer.account, poolServer:poolServer, owner:poolServer.account, name:network.name ?: networkCidr, externalId:"${network.id}",
+                                 internalId:"${network.configurationId}", cidr: networkCidr, configuration: network.configurationName, type: poolTypeIpv6, poolEnabled:true, parentType:'NetworkPoolServer', parentId:poolServer.id,
+                                 dnsSearchPath:defaultViewId]
+                def newNetworkPool = new NetworkPool(addConfig)
             }
+            missingPoolsList.add(newNetworkPool)
         }
+        log.info("Missing Pools List: ${missingPoolsList}")
         morpheus.network.pool.create(poolServer.id, missingPoolsList).blockingGet()
     }
 
@@ -1170,6 +1182,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
         } catch(e) {
             log.error("collect filtered items: ${e}", e)
         }
+        log.debug("Collect Filtered Items Results: ${rtn}")
         return rtn
     }
 
@@ -1231,6 +1244,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
         } catch(e) {
             log.error("collectAllNetworks error: ${e}", e)
         }
+        log.debug("Collect All Networks Results: ${rtn}")
         return rtn
     }
 
@@ -1480,7 +1494,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
         } catch(e) {
             log.error("listNetworkBlocks error: ${e}", e)
         }
-        log.info("List Network Blocks Results: ${rtn}")
+        log.debug("List Network Blocks Results: ${rtn}")
         return rtn
     }
 
@@ -1711,7 +1725,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
         } catch(e) {
             log.error("listNetworks error: ${e}", e)
         }
-        log.info("List Networks Results: ${rtn}")
+        log.debug("List Networks Results: ${rtn}")
         return rtn
     }
 
