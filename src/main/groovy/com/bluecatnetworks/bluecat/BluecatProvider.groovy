@@ -413,14 +413,15 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
         def poolTypeIpv6 = new NetworkPoolType(code: 'bluecatipv6')
         List<NetworkPool> missingPoolsList = []
         chunkedAddList?.each { Map network ->
+            def networkCidr
+            def newNetworkPool
             log.info("NETWORKNETWORK: ${network}")
             def networkProps = extractNetworkProperties(network.properties)
             if (network.type == 'IP4Network') {
-                String networkCidr = networkProps['CIDR'] as String
+                networkCidr = networkProps['CIDR'] as String
             } else {
-                String networkCidr = networkProps['prefix'] as String
+                networkCidr = networkProps['prefix'] as String
             }
-            log.info("NETWORKNETWORKCIDR: ${networkCidr}")
             def defaultViewId = extractDefaultView(network, networkProps,listResults.networks,listResults.blocks,listResults.views)
             if(networkCidr && network.type == 'IP4Network') {
                 def networkInfo = getNetworkPoolConfig(networkCidr)
@@ -429,7 +430,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                                  internalId:"${network.configurationId}", cidr: networkCidr, configuration: network.configurationName, type: poolType, poolEnabled:true, parentType:'NetworkPoolServer', parentId:poolServer.id,
                                  dnsSearchPath:defaultViewId]
                 addConfig += networkInfo.config
-                def newNetworkPool = new NetworkPool(addConfig)
+                newNetworkPool = new NetworkPool(addConfig)
                 newNetworkPool.ipRanges = []
                 networkInfo.ranges?.each { range ->
                     def rangeConfig = [startAddress:range.startAddress, endAddress:range.endAddress, addressCount:addConfig.ipCount]
@@ -440,7 +441,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                 def addConfig = [account:poolServer.account, poolServer:poolServer, owner:poolServer.account, name:network.name ?: networkCidr, externalId:"${network.id}",
                                  internalId:"${network.configurationId}", cidr: networkCidr, configuration: network.configurationName, type: poolTypeIpv6, poolEnabled:true, parentType:'NetworkPoolServer', parentId:poolServer.id,
                                  dnsSearchPath:defaultViewId]
-                def newNetworkPool = new NetworkPool(addConfig)
+                newNetworkPool = new NetworkPool(addConfig)
             }
             missingPoolsList.add(newNetworkPool)
         }
