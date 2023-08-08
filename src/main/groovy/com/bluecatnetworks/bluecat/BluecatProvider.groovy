@@ -1787,7 +1787,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
     Collection<NetworkPoolType> getNetworkPoolTypes() {
         return [
                 new NetworkPoolType(code:'bluecat', name:'Bluecat', creatable:false, description:'Bluecat', rangeSupportsCidr: false, hostRecordEditable: false),
-                new NetworkPoolType(code:'bluecatipv6', name:'Bluecat IPv6', creatable:false, description:'Bluecat IPv6', rangeSupportsCidr: true, hostRecordEditable: false)
+                new NetworkPoolType(code:'bluecatipv6', name:'Bluecat IPv6', creatable:false, description:'Bluecat IPv6', rangeSupportsCidr: true, hostRecordEditable: false, ipv6Pool:true)
         ]
     }
 
