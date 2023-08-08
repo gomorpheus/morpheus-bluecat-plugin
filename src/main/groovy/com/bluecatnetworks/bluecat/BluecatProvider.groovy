@@ -444,6 +444,12 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                                  internalId:"${network.configurationId}", cidr: networkCidr, configuration: network.configurationName, type: poolTypeIpv6, poolEnabled:true, parentType:'NetworkPoolServer', parentId:poolServer.id,
                                  dnsSearchPath:defaultViewId]
                 newNetworkPool = new NetworkPool(addConfig)
+                newNetworkPool.ipRanges = []
+                networkInfo.ranges?.each { range ->
+                    rangeConfig = [cidrIPv6: networkCidr]
+                    addRange = new NetworkPoolRange(rangeConfig)
+                    newNetworkPool.ipRanges.add(addRange)
+                }
             }
             missingPoolsList.add(newNetworkPool)
         }
