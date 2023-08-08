@@ -415,8 +415,10 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
         chunkedAddList?.each { Map network ->
             def networkCidr
             def newNetworkPool
-            log.info("NETWORKNETWORK: ${network}")
             def networkProps = extractNetworkProperties(network.properties)
+            def rangeConfig
+            def addRange
+            def networkInfo
             if (network.type == 'IP4Network') {
                 networkCidr = networkProps['CIDR'] as String
             } else {
@@ -424,7 +426,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
             }
             def defaultViewId = extractDefaultView(network, networkProps,listResults.networks,listResults.blocks,listResults.views)
             if(networkCidr && network.type == 'IP4Network') {
-                def networkInfo = getNetworkPoolConfig(networkCidr)
+                networkInfo = getNetworkPoolConfig(networkCidr)
 
                 def addConfig = [account:poolServer.account, poolServer:poolServer, owner:poolServer.account, name:network.name ?: networkCidr, externalId:"${network.id}",
                                  internalId:"${network.configurationId}", cidr: networkCidr, configuration: network.configurationName, type: poolType, poolEnabled:true, parentType:'NetworkPoolServer', parentId:poolServer.id,
@@ -433,8 +435,8 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                 newNetworkPool = new NetworkPool(addConfig)
                 newNetworkPool.ipRanges = []
                 networkInfo.ranges?.each { range ->
-                    def rangeConfig = [startAddress:range.startAddress, endAddress:range.endAddress, addressCount:addConfig.ipCount]
-                    def addRange = new NetworkPoolRange(rangeConfig)
+                    rangeConfig = [startAddress:range.startAddress, endAddress:range.endAddress, addressCount:addConfig.ipCount]
+                    addRange = new NetworkPoolRange(rangeConfig)
                     newNetworkPool.ipRanges.add(addRange)
                 }
             } else if (networkCidr && network.type == 'IP6Network') {
@@ -808,14 +810,16 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                 if(networkPoolIp.ipAddress) {
                     // Make sure it's a valid IP
                     if (inetAddressValidator.isValidInet4Address(networkPoolIp.ipAddress)) {
+                        log.info("A Valid IPv4 Address Entered: ${networkPoolIp.ipAddress}")
                         requestOptions.queryParams.ip4Address = networkPoolIp.ipAddress
                         apiPath = getServicePath(rpcConfig.serviceUrl) + 'assignIP4Address'
                     } else if (inetAddressValidator.isValidInet6Address(networkPoolIp.ipAddress)) {
                         // Check if IPv6 Address Exists
+                        log.info("A Valid IPv6 Address Entered: ${networkPoolIp.ipAddress}")
                         requestOptions.queryParams = [address:networkPoolIp.ipAddress, containerId:networkPool.internalId]
                         apiPath = getServicePath(rpcConfig.serviceUrl) + 'getIP6Address'
                         def results = client.callJsonApi(apiUrl,apiPath,null,null,requestOptions, 'GET')
-                        if(results?.success && results?.id != 0) {
+                        if(results?.success && results?.data?.id != 0) {
                             log.error("IPv6 Address Already in Use: ${networkPoolIp.ipAddress}", results)
                             return ServiceResponse.error("IPv6 Address Already in Use: ${networkPoolIp.ipAddress}")
                         } else {
@@ -1774,7 +1778,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
     Collection<NetworkPoolType> getNetworkPoolTypes() {
         return [
                 new NetworkPoolType(code:'bluecat', name:'Bluecat', creatable:false, description:'Bluecat', rangeSupportsCidr: false, hostRecordEditable: false),
-                new NetworkPoolType(code:'bluecatipv6', name:'Bluecat IPv6', creatable:false, description:'Bluecat IPv6', rangeSupportsCidr: false, hostRecordEditable: false)
+                new NetworkPoolType(code:'bluecatipv6', name:'Bluecat IPv6', creatable:false, description:'Bluecat IPv6', rangeSupportsCidr: true, hostRecordEditable: false)
         ]
     }
 
