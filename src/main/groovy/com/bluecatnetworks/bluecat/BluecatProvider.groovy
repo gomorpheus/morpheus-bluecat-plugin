@@ -445,7 +445,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                                  dnsSearchPath:defaultViewId]
                 newNetworkPool = new NetworkPool(addConfig)
                 newNetworkPool.ipRanges = []
-                rangeConfig = [cidrIPv6: networkCidr, startipv6address: networkCidr.tokenize('/')[0], endipv6address: networkCidr.tokenize('/')[0]]
+                rangeConfig = [cidrIPv6: networkCidr, startIPv6Address: networkCidr.tokenize('/')[0], endIPv6Address: networkCidr.tokenize('/')[0]]
                 addRange = new NetworkPoolRange(rangeConfig)
                 newNetworkPool.ipRanges.add(addRange)
             }
@@ -461,6 +461,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
             NetworkPool existingItem = update.existingItem
             Map network = update.masterItem
             def networkProps = extractNetworkProperties(network.properties)
+            log.info("zzzNetworkProps: ${networkProps}")
             def defaultViewId = extractDefaultView(network, networkProps,listResults.networks,listResults.blocks,listResults.views)
             def name
             def networkCidr
