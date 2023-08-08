@@ -446,7 +446,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                 newNetworkPool = new NetworkPool(addConfig)
                 newNetworkPool.ipRanges = []
                 networkInfo.ranges?.each { range ->
-                    rangeConfig = [cidrIPv6: networkCidr]
+                    rangeConfig = [cidrIPv6: networkCidr, startipv6address: networkCidr.tokenize('/')[0], endipv6address: networkCidr.tokenize('/')[0]]
                     addRange = new NetworkPoolRange(rangeConfig)
                     newNetworkPool.ipRanges.add(addRange)
                 }
@@ -790,6 +790,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                 def apiPath = getServicePath(rpcConfig.serviceUrl) + 'addDeviceInstance'
                 def hostInfo
                 def viewName = null
+                def nextIpv6
                 if(networkPool.dnsSearchPath) {
                     def viewobjresults = getEntity(client,token.token as String,poolServer,networkPool.dnsSearchPath.toLong(),[:])
                     if(!viewobjresults.success) {
@@ -811,8 +812,6 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                 }
                 
                 requestOptions.queryParams = [parentId:networkPool.externalId, macAddress:'', configurationId:networkPool.internalId, action:'MAKE_STATIC', hostInfo:hostInfo, properties:extraProperties]
-                
-                log.info("zzzNetworkPool: ${networkPool.encodeAsJson().toString()}")
 
                 // time to dry without dns
                 if(networkPoolIp.ipAddress) {
@@ -847,8 +846,8 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                         apiPath = getServicePath(rpcConfig.serviceUrl) + 'getNextAvailableIP6Address'
                         requestOptions.queryParams = [parentId:networkPool.externalId]
                         def results = client.callJsonApi(apiUrl,apiPath,null,null,requestOptions, 'GET')
-                        log.info("zzzResults: ${results}")
                         if(results?.success && results?.error != true) {
+                            nextIpv6 = results.data
                             requestOptions.queryParams = [containerId:networkPool.externalId, address:results.data, name:hostname, type:'IP6Address', properties:extraProperties]
                             apiPath = getServicePath(rpcConfig.serviceUrl) + 'addIP6Address'
                         } else {
@@ -864,15 +863,18 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                     log.info("getNextIpAddress: ${results}")
                     if(networkPoolIp.ipAddress) {
                         networkPoolIp.externalId = results.content
-
                     } else {
-                        def extraProps = extractNetworkProperties(results.data?.properties)
-                        networkPoolIp.ipAddress = extraProps.address
-                        networkPoolIp.externalId = results.data.id
+                        if (networkPool.type.code == 'bluecat') {
+                            def extraProps = extractNetworkProperties(results.data?.properties)
+                            networkPoolIp.ipAddress = extraProps.address
+                            networkPoolIp.externalId = results.data?.id
+                        } else {
+                            networkPoolIp.ipAddress = nextIpv6
+                            networkPoolIp.externalId = results.data
+                        }
                     }
                     if(!hostname.endsWith('localdomain') && hostname.contains('.') && createARecord != false) {
                         networkPoolIp.domain = domain
-
                     }
                     if (networkPoolIp.id) {
                         networkPoolIp = morpheus.network.pool.poolIp.save(networkPoolIp)?.blockingGet()
