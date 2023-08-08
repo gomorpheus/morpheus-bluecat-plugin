@@ -415,12 +415,12 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
         chunkedAddList?.each { Map network ->
             log.info("NETWORKNETWORK: ${network}")
             def networkProps = extractNetworkProperties(network.properties)
-            log.info("NETWORKNETWORKPROPS: ${networkProps}")
             if (network.type == 'IP4Network') {
                 String networkCidr = networkProps['CIDR'] as String
             } else {
                 String networkCidr = networkProps['prefix'] as String
             }
+            log.info("NETWORKNETWORKCIDR: ${networkCidr}")
             def defaultViewId = extractDefaultView(network, networkProps,listResults.networks,listResults.blocks,listResults.views)
             if(networkCidr && network.type == 'IP4Network') {
                 def networkInfo = getNetworkPoolConfig(networkCidr)
