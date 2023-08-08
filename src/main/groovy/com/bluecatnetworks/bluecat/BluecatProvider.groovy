@@ -780,6 +780,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                     hostInfo = "${hostname}".toString()  //hostname,viewId,reverseFlag,sameAsZoneFlag
                     extraProperties = "name=${hostname}|${extraProperties}|".toString()
                 }
+                
                 requestOptions.queryParams = [parentId:networkPool.externalId, macAddress:'', configurationId:networkPool.internalId, action:'MAKE_STATIC', hostInfo:hostInfo, properties:extraProperties]
                 
                 // time to dry without dns
@@ -804,25 +805,26 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                         log.error("Assign IP Address Error: Invalid IP Address ${networkPoolIp.ipAddress}", results)
                         return ServiceResponse.error("Assign IP Address Error: Invalid IP Address ${networkPoolIp.ipAddress}")
                     }
-                }
-
-                log.info("unable to allocate DNS records for bluecat IPAM. Attempting simple ip allocation instead.")
-                
-                if (networkPool.type.code == 'bluecat') {
-                    apiPath = getServicePath(rpcConfig.serviceUrl) + 'assignNextAvailableIP4Address'
-                } else if (networkPool.type.code == 'bluecatipv6') {
-                    apiPath = getServicePath(rpcConfig.serviceUrl) + 'getNextAvailableIP6Address'
-                    requestOptions.queryParams = [parentId:networkPool.internalId]
-                    def results = client.callJsonApi(apiUrl,apiPath,null,null,requestOptions, 'GET')
+                } else {
+                    log.info("unable to allocate DNS records for bluecat IPAM. Attempting simple ip allocation instead.")
                     
-                    if(results?.success && results?.error != true) {
-                        requestOptions.queryParams = [containerId:networkPool.internalId, address:results.replace("\"", ""), name:hostname, type:'IP6Address', properties:extraProperties]
-                        apiPath = getServicePath(rpcConfig.serviceUrl) + 'addIP6Address'
-                    } else {
-                        log.error("Add IPv6 Address to Pool Failed", results)
-                        return ServiceResponse.error("Add IPv6 Address to Pool Failed")
+                    if (networkPool.type.code == 'bluecat') {
+                        apiPath = getServicePath(rpcConfig.serviceUrl) + 'assignNextAvailableIP4Address'
+                    } else if (networkPool.type.code == 'bluecatipv6') {
+                        apiPath = getServicePath(rpcConfig.serviceUrl) + 'getNextAvailableIP6Address'
+                        requestOptions.queryParams = [parentId:networkPool.internalId]
+                        def results = client.callJsonApi(apiUrl,apiPath,null,null,requestOptions, 'GET')
+                        
+                        if(results?.success && results?.error != true) {
+                            requestOptions.queryParams = [containerId:networkPool.internalId, address:results.replace("\"", ""), name:hostname, type:'IP6Address', properties:extraProperties]
+                            apiPath = getServicePath(rpcConfig.serviceUrl) + 'addIP6Address'
+                        } else {
+                            log.error("Add IPv6 Address to Pool Failed", results)
+                            return ServiceResponse.error("Add IPv6 Address to Pool Failed")
+                        }
                     }
                 }
+             
                 def results = client.callJsonApi(apiUrl,apiPath,null,null,requestOptions, 'POST')
 
                 if(results?.success && results?.error != true) {
@@ -1454,22 +1456,25 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
             def start = 0
             def count = 100
             def attempt = 0
-            while(hasMore == true && attempt < 1000) {
-                attempt++
-                HttpApiClient.RequestOptions requestOptions = new HttpApiClient.RequestOptions(ignoreSSL: rpcConfig.ignoreSSL)
-                requestOptions.headers = [Authorization: "BAMAuthToken: ${token}".toString()]
-                requestOptions.queryParams = [type:'IP4Block', start:start.toString(), count:count.toString(), parentId:opts.parentId?.toString()]
-                def results = client.callJsonApi(apiUrl,apiPath,null,null,requestOptions,'GET')
-                if(results?.success && results?.error != true && results.data?.size() > 0) {
-                    rtn.networkBlocks += results.data
-                    if(results.data?.size() >= count) {
-                        start += count
+            def allBlocks = ['IP4Block','IP6Block']
+            for (allBlock in allBlocks) {
+                while(hasMore == true && attempt < 1000) {
+                    attempt++
+                    HttpApiClient.RequestOptions requestOptions = new HttpApiClient.RequestOptions(ignoreSSL: rpcConfig.ignoreSSL)
+                    requestOptions.headers = [Authorization: "BAMAuthToken: ${token}".toString()]
+                    requestOptions.queryParams = [type: allBlock, start:start.toString(), count:count.toString(), parentId:opts.parentId?.toString()]
+                    def results = client.callJsonApi(apiUrl,apiPath,null,null,requestOptions,'GET')
+                    if(results?.success && results?.error != true && results.data?.size() > 0) {
+                        rtn.networkBlocks += results.data
+                        if(results.data?.size() >= count) {
+                            start += count
+                        } else {
+                            hasMore = false
+                        }
+                        rtn.success = true
                     } else {
                         hasMore = false
                     }
-                    rtn.success = true
-                } else {
-                    hasMore = false
                 }
             }
         } catch(e) {
@@ -1648,53 +1653,56 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
             def count = opts.maxResults != null ? opts.maxResults : 100
             Integer attempt = 0
             def doPaging = opts.doPaging != null ? opts.doPaging : true
-            while(hasMore && attempt < 1000) {
-                attempt++
-                HttpApiClient.RequestOptions requestOptions = new HttpApiClient.RequestOptions(ignoreSSL: rpcConfig.ignoreSSL)
-                requestOptions.headers = [Authorization: "BAMAuthToken: ${token}".toString()]
-                requestOptions.queryParams = [type:'IP4Network', start:start.toString(), count:count.toString()]
-                if(opts.parentId) {
-                    requestOptions.queryParams.parentId = opts.parentId.toString()
-                }
+            def allNetworks = ['IP4Network','IP6Network']
+            for (allNetwork in allNetworks) {
+                while(hasMore && attempt < 1000) {
+                    attempt++
+                    HttpApiClient.RequestOptions requestOptions = new HttpApiClient.RequestOptions(ignoreSSL: rpcConfig.ignoreSSL)
+                    requestOptions.headers = [Authorization: "BAMAuthToken: ${token}".toString()]
+                    requestOptions.queryParams = [type: allNetwork, start:start.toString(), count:count.toString()]
+                    if(opts.parentId) {
+                        requestOptions.queryParams.parentId = opts.parentId.toString()
+                    }
 
-                def results = client.callJsonApi(apiUrl,apiPath,null,null,requestOptions,'GET')
+                    def results = client.callJsonApi(apiUrl,apiPath,null,null,requestOptions,'GET')
 
-                if(results?.success && results?.error != true) {
-                    rtn.success = true
-                    if(results.data?.size() > 0) {
-                        rtn.networks += results.data
-                        if(doPaging == true && results.data?.size() >= count) {
-                            start += count
+                    if(results?.success && results?.error != true) {
+                        rtn.success = true
+                        if(results.data?.size() > 0) {
+                            rtn.networks += results.data
+                            if(doPaging == true && results.data?.size() >= count) {
+                                start += count
+                            } else {
+                                hasMore = false
+                            }
                         } else {
+                            //no more content
                             hasMore = false
                         }
                     } else {
-                        //no more content
+                        //error
                         hasMore = false
-                    }
-                } else {
-                    //error
-                    hasMore = false
-                    //check for bad creds
-                    if(results.errorCode == 401i) {
-                        rtn.errorCode = 401i
-                        rtn.invalidLogin = true
-                        rtn.success = true
-                        rtn.error = true
-                        rtn.msg = results.content ?: 'invalid credentials'
-                    } else if(results.errorCode == 400i) {
-                        //request
-                        rtn.errorCode = 400i
-                        //consider this success - just no content
-                        rtn.success = true
-                        rtn.error = false
-                        rtn.msg = results.content ?: 'invalid api request'
-                    } else {
-                        rtn.errorCode = results.errorCode ?: 500i
-                        rtn.success = false
-                        rtn.error = true
-                        rtn.msg = results.content ?: 'unknown api error'
-                        log.warn("error: ${rtn.errorCode} - ${rtn.content}")
+                        //check for bad creds
+                        if(results.errorCode == 401i) {
+                            rtn.errorCode = 401i
+                            rtn.invalidLogin = true
+                            rtn.success = true
+                            rtn.error = true
+                            rtn.msg = results.content ?: 'invalid credentials'
+                        } else if(results.errorCode == 400i) {
+                            //request
+                            rtn.errorCode = 400i
+                            //consider this success - just no content
+                            rtn.success = true
+                            rtn.error = false
+                            rtn.msg = results.content ?: 'invalid api request'
+                        } else {
+                            rtn.errorCode = results.errorCode ?: 500i
+                            rtn.success = false
+                            rtn.error = true
+                            rtn.msg = results.content ?: 'unknown api error'
+                            log.warn("error: ${rtn.errorCode} - ${rtn.content}")
+                        }
                     }
                 }
             }
