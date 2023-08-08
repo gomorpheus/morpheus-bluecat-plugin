@@ -1440,7 +1440,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
             }
 
         } catch(e) {
-            log.error("listls error: ${e}", e)
+            log.error("List Collections Error: ${e}", e)
         }
         log.debug("List Collections Results: ${rtn}")
         return rtn
@@ -1452,12 +1452,12 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
             def rpcConfig = getRpcConfig(poolServer)
             def apiUrl = cleanServiceUrl(rpcConfig.serviceUrl)
             def apiPath = getServicePath(rpcConfig.serviceUrl) + 'getEntities'
-            def hasMore = true
-            def start = 0
-            def count = 100
-            def attempt = 0
             def allBlocks = ['IP4Block','IP6Block']
             for (allBlock in allBlocks) {
+                def hasMore = true
+                def attempt = 0
+                def start = 0
+                def count = 100
                 while(hasMore == true && attempt < 1000) {
                     attempt++
                     HttpApiClient.RequestOptions requestOptions = new HttpApiClient.RequestOptions(ignoreSSL: rpcConfig.ignoreSSL)
@@ -1480,6 +1480,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
         } catch(e) {
             log.error("listNetworkBlocks error: ${e}", e)
         }
+        log.info("List Network Blocks Results: ${rtn}")
         return rtn
     }
 
@@ -1647,14 +1648,14 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
         try {
             def rpcConfig = getRpcConfig(poolServer)
             def apiUrl = cleanServiceUrl(rpcConfig.serviceUrl)
-            def apiPath = getServicePath(rpcConfig.serviceUrl) + 'getEntities'
-            Boolean hasMore = true
-            Integer start = 0
-            def count = opts.maxResults != null ? opts.maxResults : 100
-            Integer attempt = 0
+            def apiPath = getServicePath(rpcConfig.serviceUrl) + 'getEntities'         
             def doPaging = opts.doPaging != null ? opts.doPaging : true
             def allNetworks = ['IP4Network','IP6Network']
             for (allNetwork in allNetworks) {
+                def hasMore = true
+                def attempt = 0
+                def start = 0
+                def count = opts.maxResults != null ? opts.maxResults : 100
                 while(hasMore && attempt < 1000) {
                     attempt++
                     HttpApiClient.RequestOptions requestOptions = new HttpApiClient.RequestOptions(ignoreSSL: rpcConfig.ignoreSSL)
@@ -1710,7 +1711,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
         } catch(e) {
             log.error("listNetworks error: ${e}", e)
         }
-        log.debug("List Networks Results: ${rtn}")
+        log.info("List Networks Results: ${rtn}")
         return rtn
     }
 
