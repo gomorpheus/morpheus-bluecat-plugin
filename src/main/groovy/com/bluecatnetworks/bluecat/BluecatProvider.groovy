@@ -456,7 +456,15 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
             Map network = update.masterItem
             def networkProps = extractNetworkProperties(network.properties)
             def defaultViewId = extractDefaultView(network, networkProps,listResults.networks,listResults.blocks,listResults.views)
-            def name = network.name ?: networkProps['CIDR']
+            def name
+            def networkCidr
+            if (network.type == 'IP4Network') {
+                name = network.name ?: networkProps['CIDR']
+                networkCidr = networkProps['CIDR']
+            } else {
+                name = network.name ?: networkProps['prefix']
+                networkCidr = networkProps['prefix']
+            }
             if(existingItem) {
                 //update view ?
                 Boolean save = false
@@ -468,8 +476,8 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                     existingItem.dnsSearchPath = defaultViewId
                     save = true
                 }
-                if(existingItem.cidr != networkProps['CIDR']) {
-                    existingItem.cidr = networkProps['CIDR']
+                if(existingItem.cidr != networkCidr) {
+                    existingItem.cidr = networkCidr
                     save = true
                 }
                 if(existingItem.configuration != network.configurationName) {
