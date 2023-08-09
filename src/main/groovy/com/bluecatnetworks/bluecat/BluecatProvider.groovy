@@ -94,7 +94,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                 def extraProperties
 
                 if(poolServer.configMap?.extraProperties) {
-					extraProperties = poolServer.configMap?.extraProperties
+					extraProperties = generateExtraProperties(poolServer,networkPoolIp)
 				}
 
                 Map<String,String> apiQuery
@@ -445,7 +445,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                                  dnsSearchPath:defaultViewId]
                 newNetworkPool = new NetworkPool(addConfig)
                 newNetworkPool.ipRanges = []
-                rangeConfig = [cidrIPv6: networkCidr, startIPv6Address: networkCidr.tokenize('/')[0], endIPv6Address: networkCidr.tokenize('/')[0]]
+                rangeConfig = [cidrIPv6: networkCidr, startIPv6Address: networkCidr.tokenize('/')[0], endIPv6Address: networkCidr.tokenize('/')[0],addressCount:1]
                 addRange = new NetworkPoolRange(rangeConfig)
                 newNetworkPool.ipRanges.add(addRange)
             }
@@ -461,7 +461,6 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
             NetworkPool existingItem = update.existingItem
             Map network = update.masterItem
             def networkProps = extractNetworkProperties(network.properties)
-            log.info("zzzNetworkProps: ${networkProps}")
             def defaultViewId = extractDefaultView(network, networkProps,listResults.networks,listResults.blocks,listResults.views)
             def name
             def networkCidr
@@ -774,7 +773,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
 
         def extraProperties
         if(poolServer.configMap?.extraProperties) {
-            extraProperties = poolServer.configMap?.extraProperties
+            extraProperties = generateExtraProperties(poolServer, networkPoolIp)
         }
 
         try {
@@ -881,6 +880,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                         networkPoolIp = morpheus.network.pool.poolIp.create(networkPoolIp)?.blockingGet()
                     }
                     if(!hostname.endsWith('localdomain') && hostname.contains('.') && createARecord != false) {
+                        log.info("zzznetworkDomain: ${domain}, networkPoolIp: ${networkPoolIp}, name: ${hostname}, fqdn: ${hostname}, source: 'user', type: 'HOST', externalId: ${networkPoolIp.externalId}")
                         def domainRecord = new NetworkDomainRecord(networkDomain: domain, networkPoolIp: networkPoolIp, name: hostname, fqdn: hostname, source: 'user', type: 'HOST', externalId: networkPoolIp.externalId)
                         domainRecord.setContent(networkPoolIp.ipAddress)
                         morpheus.network.domain.record.create(domainRecord).blockingGet()
@@ -1963,6 +1963,41 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
         }
         return null
     }
+
+    static formatDate(Object date, String outputFormat = "yyyy-MM-dd' 'HH:mm:ss.SSSSSSSSS") {
+        def rtn
+        try {
+            if(date) {
+                if(date instanceof Date)
+                    rtn = date.format(outputFormat, TimeZone.getTimeZone('GMT'))
+                else if(date instanceof CharSequence)
+                    rtn = date
+            }
+        } catch(ignored) { }
+        return rtn
+    }
+
+    private String generateExtraProperties(NetworkPoolServer poolServer, NetworkPoolIp networkPoolIp) {
+		try {
+			def extraProperties = poolServer.configMap?.extraProperties
+            if (extraProperties.contains('<%=username%>')) {
+                extraProperties = extraProperties.replaceAll('<%=username%>', networkPoolIp.createdBy?.username)
+            }
+            if (extraProperties.contains('<%=userId%>')) {
+                extraProperties = extraProperties.replaceAll('<%=userId%>', networkPoolIp.createdBy?.id)
+            }
+            if (extraProperties.contains('<%=dateCreated%>')) {
+                extraProperties = extraProperties.replaceAll('<%=dateCreated%>', formatDate(new Date()))
+            }
+			
+			log.debug("Extra Properties for Bluecat: {}", extraProperties)
+			return extraProperties
+		} catch(ex) {
+			log.error("Error generating extra properties for Bluecat: {}",ex.message,ex)
+			return null
+		}
+
+	}
 
     static Map getNetworkPoolConfig(String cidr) {
         def rtn = [config:[:], ranges:[]]
