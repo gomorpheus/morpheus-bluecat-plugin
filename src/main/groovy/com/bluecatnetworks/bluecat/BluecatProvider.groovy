@@ -94,7 +94,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                 def extraProperties
 
                 if(poolServer.configMap?.extraProperties) {
-					extraProperties = generateExtraProperties(poolServer,networkPoolIp)
+					extraProperties = poolServer.configMap?.extraProperties
 				}
 
                 Map<String,String> apiQuery
@@ -800,15 +800,15 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
 
                 HttpApiClient.RequestOptions requestOptions = new HttpApiClient.RequestOptions(ignoreSSL: rpcConfig.ignoreSSL)
                 requestOptions.headers = [Authorization: "BAMAuthToken: ${token.token}".toString()]
-                
+
                 if(!hostname.endsWith('localdomain') && hostname.contains('.') && createARecord != false) {
-                    hostInfo = "${hostname},${networkPool.dnsSearchPath ? networkPool.dnsSearchPath : ''},true,false".toString()  //hostname,viewId,reverseFlag,sameAsZoneFlag
-                    extraProperties = "name=${hostname}|${extraProperties}|".toString()
+                    hostInfo = "${hostname},${networkPool.dnsSearchPath ? networkPool.dnsSearchPath : ''},true,false".toString()  //hostname,viewId,reverseFlag,sameAsZoneFlag   
                 } else {
                     hostInfo = "${hostname}".toString()  //hostname,viewId,reverseFlag,sameAsZoneFlag
-                    extraProperties = "name=${hostname}|${extraProperties}|".toString()
                 }
                 
+                extraProperties = "name=${hostname}|${extraProperties}|".toString()
+
                 requestOptions.queryParams = [parentId:networkPool.externalId, macAddress:'', configurationId:networkPool.internalId, action:'MAKE_STATIC', hostInfo:hostInfo, properties:extraProperties]
 
                 // time to dry without dns
@@ -824,6 +824,8 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                         requestOptions.queryParams = [address:networkPoolIp.ipAddress, containerId:networkPool.externalId]
                         apiPath = getServicePath(rpcConfig.serviceUrl) + 'getIP6Address'
                         def results = client.callJsonApi(apiUrl,apiPath,null,null,requestOptions, 'GET')
+
+                        // Add IP6Address to Pool
                         if(results?.success && results?.data?.id != 0) {
                             log.error("IPv6 Address Already in Use: ${networkPoolIp.ipAddress}", results)
                             return ServiceResponse.error("IPv6 Address Already in Use: ${networkPoolIp.ipAddress}")
@@ -831,6 +833,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                             requestOptions.queryParams = [containerId:networkPool.externalId, address:networkPoolIp.ipAddress, name:hostname, type:'IP6Address', properties:extraProperties]
                             apiPath = getServicePath(rpcConfig.serviceUrl) + 'addIP6Address'
                         }
+
                     } else {
                         log.error("Assign IP Address Error: Invalid IP Address ${networkPoolIp.ipAddress}", results)
                         return ServiceResponse.error("Assign IP Address Error: Invalid IP Address ${networkPoolIp.ipAddress}")
@@ -857,6 +860,13 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
              
                 def results = client.callJsonApi(apiUrl,apiPath,null,null,requestOptions, 'POST')
 
+                // Add IPv6 Host Record
+                if(results?.success && networkPool.type.code == 'bluecatipv6' && domain && createARecord != false) {
+                    requestOptions.queryParams = [absoluteName:hostname,addresses:networkPoolIp.ipAddress,ttl:'-1',viewId:domain.internalId]
+                    apiPath = getServicePath(rpcConfig.serviceUrl) + 'addHostRecord'
+                    client.callJsonApi(apiUrl,apiPath,null,null,requestOptions, 'POST')
+                }
+
                 if(results?.success && results?.error != true) {
                     log.info("getNextIpAddress: ${results}")
                     if(networkPoolIp.ipAddress) {
@@ -880,7 +890,6 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                         networkPoolIp = morpheus.network.pool.poolIp.create(networkPoolIp)?.blockingGet()
                     }
                     if(!hostname.endsWith('localdomain') && hostname.contains('.') && createARecord != false) {
-                        log.info("zzznetworkDomain: ${domain}, networkPoolIp: ${networkPoolIp}, name: ${hostname}, fqdn: ${hostname}, source: 'user', type: 'HOST', externalId: ${networkPoolIp.externalId}")
                         def domainRecord = new NetworkDomainRecord(networkDomain: domain, networkPoolIp: networkPoolIp, name: hostname, fqdn: hostname, source: 'user', type: 'HOST', externalId: networkPoolIp.externalId)
                         domainRecord.setContent(networkPoolIp.ipAddress)
                         morpheus.network.domain.record.create(domainRecord).blockingGet()
