@@ -47,6 +47,7 @@ import org.apache.commons.net.util.SubnetUtils
 import org.apache.http.entity.ContentType
 import io.reactivex.Observable
 import org.apache.tools.ant.types.spi.Service
+import org.apache.commons.validator.routines.InetAddressValidator
 
 /**
  * The IPAM / DNS Provider implementation for Bluecat
@@ -91,6 +92,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                 def apiPath
                 def properties
                 def extraProperties
+
                 if(poolServer.configMap?.extraProperties) {
 					extraProperties = poolServer.configMap?.extraProperties
 				}
@@ -101,21 +103,15 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                 if(token.success) {
                     String apiUrl = cleanServiceUrl(rpcConfig.serviceUrl)
                     extraProperties = "${fqdn}|${extraProperties}|".toString()
-                    if(!record.type) {
-                        hostInfo = "${fqdn.tokenize('.')[0]}".toString()
-                        extraProperties = "name=${fqdn}|${extraProperties}|".toString()
-                        apiQuery = [parentId:networkPool.externalId, macAddress:'', configurationId:networkPool.internalId, action:'MAKE_STATIC', hostInfo:hostInfo, properties:extraProperties]
-                        apiPath = getServicePath(rpcConfig.serviceUrl) + 'assignIP4Address'
-                    } else {
-                        switch(record.type) {
-                            case 'CNAME':
-                                apiQuery = [absoluteName:fqdn, viewId:record.networkDomain.internalId,linkedRecordName: record.content, ttl:record.ttl?.toString(), type:record.type,properties:extraProperties] as Map<String,String>
-                                apiPath = getServicePath(rpcConfig.serviceUrl) + 'addAliasRecord'
-                                break
-                            default:
-                                apiQuery = [absoluteName:fqdn, viewId:record.networkDomain.internalId,rdata: record.content, ttl:record.ttl?.toString(), type:record.type,properties:extraProperties]
-                                apiPath = getServicePath(rpcConfig.serviceUrl) + 'addGenericRecord'
-                        }
+
+                    switch(record.type) {
+                        case 'CNAME':
+                            apiQuery = [absoluteName:fqdn, viewId:record.networkDomain.internalId,linkedRecordName: record.content, ttl:record.ttl?.toString(), type:record.type, properties:extraProperties] as Map<String,String>
+                            apiPath = getServicePath(rpcConfig.serviceUrl) + 'addAliasRecord'
+                            break
+                        default:
+                            apiQuery = [absoluteName:fqdn, viewId:record.networkDomain.internalId,rdata: record.content, ttl:record.ttl?.toString(), type:record.type, properties:extraProperties]
+                            apiPath = getServicePath(rpcConfig.serviceUrl) + 'addGenericRecord'
                     }
 
                     def results = client.callJsonApi(apiUrl,apiPath,new HttpApiClient.RequestOptions(queryParams: apiQuery, headers: [Authorization: "BAMAuthToken: ${token.token}".toString()],ignoreSSL: rpcConfig.ignoreSSL),"POST")
@@ -179,7 +175,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                             requestOptions.headers = [Authorization: "BAMAuthToken: ${token.token}".toString()]
                             requestOptions.queryParams = [objectId: record.externalId]
                             //we have an A Record to delete
-                            def results = client.callJsonApi(apiUrl, apiPath, poolServer.serviceUsername, poolServer.servicePassword, requestOptions, 'DELETE')
+                            def results = client.callJsonApi(apiUrl, apiPath, null, null, requestOptions, 'DELETE')
                             if (results.success) {
                                 rtn.success = true
                             }
@@ -417,26 +413,45 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
         def poolTypeIpv6 = new NetworkPoolType(code: 'bluecatipv6')
         List<NetworkPool> missingPoolsList = []
         chunkedAddList?.each { Map network ->
+            def networkCidr
+            def newNetworkPool
             def networkProps = extractNetworkProperties(network.properties)
-            String networkCidr = networkProps['CIDR'] as String
+            def rangeConfig
+            def addRange
+            def networkInfo
+            if (network.type == 'IP4Network') {
+                networkCidr = networkProps['CIDR'] as String
+            } else {
+                networkCidr = networkProps['prefix'] as String
+            }
             def defaultViewId = extractDefaultView(network, networkProps,listResults.networks,listResults.blocks,listResults.views)
-            if(networkCidr) {
-                def networkInfo = getNetworkPoolConfig(networkCidr)
+            if(networkCidr && network.type == 'IP4Network') {
+                networkInfo = getNetworkPoolConfig(networkCidr)
 
                 def addConfig = [account:poolServer.account, poolServer:poolServer, owner:poolServer.account, name:network.name ?: networkCidr, externalId:"${network.id}",
-                                 internalId:"${network.configurationId}", cidr: networkCidr, configuration: network.configurationName, type: network.type == 'IP6Network' ? poolTypeIpv6 : poolType, poolEnabled:true, parentType:'NetworkPoolServer', parentId:poolServer.id,
+                                 internalId:"${network.configurationId}", cidr: networkCidr, configuration: network.configurationName, type: poolType, poolEnabled:true, parentType:'NetworkPoolServer', parentId:poolServer.id,
                                  dnsSearchPath:defaultViewId]
                 addConfig += networkInfo.config
-                def newNetworkPool = new NetworkPool(addConfig)
+                newNetworkPool = new NetworkPool(addConfig)
                 newNetworkPool.ipRanges = []
                 networkInfo.ranges?.each { range ->
-                    def rangeConfig = [startAddress:range.startAddress, endAddress:range.endAddress, addressCount:addConfig.ipCount]
-                    def addRange = new NetworkPoolRange(rangeConfig)
+                    rangeConfig = [startAddress:range.startAddress, endAddress:range.endAddress, addressCount:addConfig.ipCount]
+                    addRange = new NetworkPoolRange(rangeConfig)
                     newNetworkPool.ipRanges.add(addRange)
                 }
-                missingPoolsList.add(newNetworkPool)
+            } else if (networkCidr && network.type == 'IP6Network') {
+                def addConfig = [account:poolServer.account, poolServer:poolServer, owner:poolServer.account, name:network.name ?: networkCidr, externalId:"${network.id}",
+                                 internalId:"${network.configurationId}", cidr: networkCidr, configuration: network.configurationName, type: poolTypeIpv6, poolEnabled:true, parentType:'NetworkPoolServer', parentId:poolServer.id,
+                                 dnsSearchPath:defaultViewId]
+                newNetworkPool = new NetworkPool(addConfig)
+                newNetworkPool.ipRanges = []
+                rangeConfig = [cidrIPv6: networkCidr, startIPv6Address: networkCidr.tokenize('/')[0], endIPv6Address: networkCidr.tokenize('/')[0],addressCount:1]
+                addRange = new NetworkPoolRange(rangeConfig)
+                newNetworkPool.ipRanges.add(addRange)
             }
+            missingPoolsList.add(newNetworkPool)
         }
+        log.info("Missing Pools List: ${missingPoolsList}")
         morpheus.network.pool.create(poolServer.id, missingPoolsList).blockingGet()
     }
 
@@ -447,7 +462,15 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
             Map network = update.masterItem
             def networkProps = extractNetworkProperties(network.properties)
             def defaultViewId = extractDefaultView(network, networkProps,listResults.networks,listResults.blocks,listResults.views)
-            def name = network.name ?: networkProps['CIDR']
+            def name
+            def networkCidr
+            if (network.type == 'IP4Network') {
+                name = network.name ?: networkProps['CIDR']
+                networkCidr = networkProps['CIDR']
+            } else {
+                name = network.name ?: networkProps['prefix']
+                networkCidr = networkProps['prefix']
+            }
             if(existingItem) {
                 //update view ?
                 Boolean save = false
@@ -459,8 +482,8 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                     existingItem.dnsSearchPath = defaultViewId
                     save = true
                 }
-                if(existingItem.cidr != networkProps['CIDR']) {
-                    existingItem.cidr = networkProps['CIDR']
+                if(existingItem.cidr != networkCidr) {
+                    existingItem.cidr = networkCidr
                     save = true
                 }
                 if(existingItem.configuration != network.configurationName) {
@@ -744,12 +767,13 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
     @Override
     ServiceResponse createHostRecord(NetworkPoolServer poolServer, NetworkPool networkPool, NetworkPoolIp networkPoolIp, NetworkDomain domain, Boolean createARecord, Boolean createPtrRecord) {
         HttpApiClient client = new HttpApiClient();
+        InetAddressValidator inetAddressValidator = new InetAddressValidator()
         def rpcConfig = getRpcConfig(poolServer)
         def token
 
         def extraProperties
         if(poolServer.configMap?.extraProperties) {
-            extraProperties = poolServer.configMap?.extraProperties
+            extraProperties = generateExtraProperties(poolServer, networkPoolIp)
         }
 
         try {
@@ -764,6 +788,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                 def apiPath = getServicePath(rpcConfig.serviceUrl) + 'addDeviceInstance'
                 def hostInfo
                 def viewName = null
+                def nextIpv6
                 if(networkPool.dnsSearchPath) {
                     def viewobjresults = getEntity(client,token.token as String,poolServer,networkPool.dnsSearchPath.toLong(),[:])
                     if(!viewobjresults.success) {
@@ -775,37 +800,89 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
 
                 HttpApiClient.RequestOptions requestOptions = new HttpApiClient.RequestOptions(ignoreSSL: rpcConfig.ignoreSSL)
                 requestOptions.headers = [Authorization: "BAMAuthToken: ${token.token}".toString()]
-                
+
                 if(!hostname.endsWith('localdomain') && hostname.contains('.') && createARecord != false) {
-                    hostInfo = "${hostname},${networkPool.dnsSearchPath ? networkPool.dnsSearchPath : ''},true,false".toString()  //hostname,viewId,reverseFlag,sameAsZoneFlag
-                    extraProperties = "name=${hostname}|${extraProperties}|".toString()
+                    hostInfo = "${hostname},${networkPool.dnsSearchPath ? networkPool.dnsSearchPath : ''},true,false".toString()  //hostname,viewId,reverseFlag,sameAsZoneFlag   
                 } else {
                     hostInfo = "${hostname}".toString()  //hostname,viewId,reverseFlag,sameAsZoneFlag
-                    extraProperties = "name=${hostname}|${extraProperties}|".toString()
                 }
+                
+                extraProperties = "name=${hostname}|${extraProperties}|".toString()
+
                 requestOptions.queryParams = [parentId:networkPool.externalId, macAddress:'', configurationId:networkPool.internalId, action:'MAKE_STATIC', hostInfo:hostInfo, properties:extraProperties]
-                apiPath = getServicePath(rpcConfig.serviceUrl) + 'assignNextAvailableIP4Address'
+
                 // time to dry without dns
                 if(networkPoolIp.ipAddress) {
-                    requestOptions.queryParams.ip4Address = networkPoolIp.ipAddress
-                    apiPath = getServicePath(rpcConfig.serviceUrl) + 'assignIP4Address'
+                    // Make sure it's a valid IP
+                    if (inetAddressValidator.isValidInet4Address(networkPoolIp.ipAddress)) {
+                        log.info("A Valid IPv4 Address Entered: ${networkPoolIp.ipAddress}")
+                        requestOptions.queryParams.ip4Address = networkPoolIp.ipAddress
+                        apiPath = getServicePath(rpcConfig.serviceUrl) + 'assignIP4Address'
+                    } else if (inetAddressValidator.isValidInet6Address(networkPoolIp.ipAddress)) {
+                        // Check if IPv6 Address Exists
+                        log.info("A Valid IPv6 Address Entered: ${networkPoolIp.ipAddress}")
+                        requestOptions.queryParams = [address:networkPoolIp.ipAddress, containerId:networkPool.externalId]
+                        apiPath = getServicePath(rpcConfig.serviceUrl) + 'getIP6Address'
+                        def results = client.callJsonApi(apiUrl,apiPath,null,null,requestOptions, 'GET')
+
+                        // Add IP6Address to Pool
+                        if(results?.success && results?.data?.id != 0) {
+                            log.error("IPv6 Address Already in Use: ${networkPoolIp.ipAddress}", results)
+                            return ServiceResponse.error("IPv6 Address Already in Use: ${networkPoolIp.ipAddress}")
+                        } else {
+                            requestOptions.queryParams = [containerId:networkPool.externalId, address:networkPoolIp.ipAddress, name:hostname, type:'IP6Address', properties:extraProperties]
+                            apiPath = getServicePath(rpcConfig.serviceUrl) + 'addIP6Address'
+                        }
+
+                    } else {
+                        log.error("Assign IP Address Error: Invalid IP Address ${networkPoolIp.ipAddress}", results)
+                        return ServiceResponse.error("Assign IP Address Error: Invalid IP Address ${networkPoolIp.ipAddress}")
+                    }
+                } else {
+                    log.info("unable to allocate DNS records for bluecat IPAM. Attempting simple ip allocation instead.")
+                    
+                    if (networkPool.type.code == 'bluecat') {
+                        apiPath = getServicePath(rpcConfig.serviceUrl) + 'assignNextAvailableIP4Address'
+                    } else if (networkPool.type.code == 'bluecatipv6') {
+                        apiPath = getServicePath(rpcConfig.serviceUrl) + 'getNextAvailableIP6Address'
+                        requestOptions.queryParams = [parentId:networkPool.externalId]
+                        def results = client.callJsonApi(apiUrl,apiPath,null,null,requestOptions, 'GET')
+                        if(results?.success && results?.error != true) {
+                            nextIpv6 = results.data
+                            requestOptions.queryParams = [containerId:networkPool.externalId, address:results.data, name:hostname, type:'IP6Address', properties:extraProperties]
+                            apiPath = getServicePath(rpcConfig.serviceUrl) + 'addIP6Address'
+                        } else {
+                            log.error("Add IPv6 Address to Pool Failed", results)
+                            return ServiceResponse.error("Add IPv6 Address to Pool Failed")
+                        }
+                    }
                 }
-                log.warn("unable to allocate DNS records for bluecat IPAM. Attempting simple ip allocation instead.")
+             
                 def results = client.callJsonApi(apiUrl,apiPath,null,null,requestOptions, 'POST')
+
+                // Add IPv6 Host Record
+                if(results?.success && networkPool.type.code == 'bluecatipv6' && domain && createARecord != false) {
+                    requestOptions.queryParams = [absoluteName:hostname,addresses:networkPoolIp.ipAddress,ttl:'-1',viewId:domain.internalId]
+                    apiPath = getServicePath(rpcConfig.serviceUrl) + 'addHostRecord'
+                    client.callJsonApi(apiUrl,apiPath,null,null,requestOptions, 'POST')
+                }
 
                 if(results?.success && results?.error != true) {
                     log.info("getNextIpAddress: ${results}")
                     if(networkPoolIp.ipAddress) {
                         networkPoolIp.externalId = results.content
-
                     } else {
-                        def extraProps = extractNetworkProperties(results.data?.properties)
-                        networkPoolIp.ipAddress = extraProps.address
-                        networkPoolIp.externalId = results.data.id
+                        if (networkPool.type.code == 'bluecat') {
+                            def extraProps = extractNetworkProperties(results.data?.properties)
+                            networkPoolIp.ipAddress = extraProps.address
+                            networkPoolIp.externalId = results.data?.id
+                        } else {
+                            networkPoolIp.ipAddress = nextIpv6
+                            networkPoolIp.externalId = results.data
+                        }
                     }
                     if(!hostname.endsWith('localdomain') && hostname.contains('.') && createARecord != false) {
                         networkPoolIp.domain = domain
-
                     }
                     if (networkPoolIp.id) {
                         networkPoolIp = morpheus.network.pool.poolIp.save(networkPoolIp)?.blockingGet()
@@ -1095,7 +1172,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                             def configuration
                             if(parentResults.parent.type == 'Configuration') {
                                 configuration = parentResults.parent
-                            } else if(type == 'IP4Block') {
+                            } else if(type == 'IP6Block') {
                                 block = parentResults.parent
                                 configuration = findEntityConfiguration(client,token, poolServer, block.id.toLong(), opts, 1)
                             } else {
@@ -1136,6 +1213,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
         } catch(e) {
             log.error("collect filtered items: ${e}", e)
         }
+        log.debug("Collect Filtered Items Results: ${rtn}")
         return rtn
     }
 
@@ -1197,6 +1275,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
         } catch(e) {
             log.error("collectAllNetworks error: ${e}", e)
         }
+        log.debug("Collect All Networks Results: ${rtn}")
         return rtn
     }
 
@@ -1406,7 +1485,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
             }
 
         } catch(e) {
-            log.error("listls error: ${e}", e)
+            log.error("List Collections Error: ${e}", e)
         }
         log.debug("List Collections Results: ${rtn}")
         return rtn
@@ -1418,31 +1497,35 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
             def rpcConfig = getRpcConfig(poolServer)
             def apiUrl = cleanServiceUrl(rpcConfig.serviceUrl)
             def apiPath = getServicePath(rpcConfig.serviceUrl) + 'getEntities'
-            def hasMore = true
-            def start = 0
-            def count = 100
-            def attempt = 0
-            while(hasMore == true && attempt < 1000) {
-                attempt++
-                HttpApiClient.RequestOptions requestOptions = new HttpApiClient.RequestOptions(ignoreSSL: rpcConfig.ignoreSSL)
-                requestOptions.headers = [Authorization: "BAMAuthToken: ${token}".toString()]
-                requestOptions.queryParams = [type:'IP4Block', start:start.toString(), count:count.toString(), parentId:opts.parentId?.toString()]
-                def results = client.callJsonApi(apiUrl,apiPath,null,null,requestOptions,'GET')
-                if(results?.success && results?.error != true && results.data?.size() > 0) {
-                    rtn.networkBlocks += results.data
-                    if(results.data?.size() >= count) {
-                        start += count
+            def allBlocks = ['IP4Block','IP6Block']
+            for (allBlock in allBlocks) {
+                def hasMore = true
+                def attempt = 0
+                def start = 0
+                def count = 100
+                while(hasMore == true && attempt < 1000) {
+                    attempt++
+                    HttpApiClient.RequestOptions requestOptions = new HttpApiClient.RequestOptions(ignoreSSL: rpcConfig.ignoreSSL)
+                    requestOptions.headers = [Authorization: "BAMAuthToken: ${token}".toString()]
+                    requestOptions.queryParams = [type: allBlock, start:start.toString(), count:count.toString(), parentId:opts.parentId?.toString()]
+                    def results = client.callJsonApi(apiUrl,apiPath,null,null,requestOptions,'GET')
+                    if(results?.success && results?.error != true && results.data?.size() > 0) {
+                        rtn.networkBlocks += results.data
+                        if(results.data?.size() >= count) {
+                            start += count
+                        } else {
+                            hasMore = false
+                        }
+                        rtn.success = true
                     } else {
                         hasMore = false
                     }
-                    rtn.success = true
-                } else {
-                    hasMore = false
                 }
             }
         } catch(e) {
             log.error("listNetworkBlocks error: ${e}", e)
         }
+        log.debug("List Network Blocks Results: ${rtn}")
         return rtn
     }
 
@@ -1610,59 +1693,62 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
         try {
             def rpcConfig = getRpcConfig(poolServer)
             def apiUrl = cleanServiceUrl(rpcConfig.serviceUrl)
-            def apiPath = getServicePath(rpcConfig.serviceUrl) + 'getEntities'
-            Boolean hasMore = true
-            Integer start = 0
-            def count = opts.maxResults != null ? opts.maxResults : 100
-            Integer attempt = 0
+            def apiPath = getServicePath(rpcConfig.serviceUrl) + 'getEntities'         
             def doPaging = opts.doPaging != null ? opts.doPaging : true
-            while(hasMore && attempt < 1000) {
-                attempt++
-                HttpApiClient.RequestOptions requestOptions = new HttpApiClient.RequestOptions(ignoreSSL: rpcConfig.ignoreSSL)
-                requestOptions.headers = [Authorization: "BAMAuthToken: ${token}".toString()]
-                requestOptions.queryParams = [type:'IP4Network', start:start.toString(), count:count.toString()]
-                if(opts.parentId) {
-                    requestOptions.queryParams.parentId = opts.parentId.toString()
-                }
+            def allNetworks = ['IP4Network','IP6Network']
+            for (allNetwork in allNetworks) {
+                def hasMore = true
+                def attempt = 0
+                def start = 0
+                def count = opts.maxResults != null ? opts.maxResults : 100
+                while(hasMore && attempt < 1000) {
+                    attempt++
+                    HttpApiClient.RequestOptions requestOptions = new HttpApiClient.RequestOptions(ignoreSSL: rpcConfig.ignoreSSL)
+                    requestOptions.headers = [Authorization: "BAMAuthToken: ${token}".toString()]
+                    requestOptions.queryParams = [type: allNetwork, start:start.toString(), count:count.toString()]
+                    if(opts.parentId) {
+                        requestOptions.queryParams.parentId = opts.parentId.toString()
+                    }
 
-                def results = client.callJsonApi(apiUrl,apiPath,null,null,requestOptions,'GET')
+                    def results = client.callJsonApi(apiUrl,apiPath,null,null,requestOptions,'GET')
 
-                if(results?.success && results?.error != true) {
-                    rtn.success = true
-                    if(results.data?.size() > 0) {
-                        rtn.networks += results.data
-                        if(doPaging == true && results.data?.size() >= count) {
-                            start += count
+                    if(results?.success && results?.error != true) {
+                        rtn.success = true
+                        if(results.data?.size() > 0) {
+                            rtn.networks += results.data
+                            if(doPaging == true && results.data?.size() >= count) {
+                                start += count
+                            } else {
+                                hasMore = false
+                            }
                         } else {
+                            //no more content
                             hasMore = false
                         }
                     } else {
-                        //no more content
+                        //error
                         hasMore = false
-                    }
-                } else {
-                    //error
-                    hasMore = false
-                    //check for bad creds
-                    if(results.errorCode == 401i) {
-                        rtn.errorCode = 401i
-                        rtn.invalidLogin = true
-                        rtn.success = true
-                        rtn.error = true
-                        rtn.msg = results.content ?: 'invalid credentials'
-                    } else if(results.errorCode == 400i) {
-                        //request
-                        rtn.errorCode = 400i
-                        //consider this success - just no content
-                        rtn.success = true
-                        rtn.error = false
-                        rtn.msg = results.content ?: 'invalid api request'
-                    } else {
-                        rtn.errorCode = results.errorCode ?: 500i
-                        rtn.success = false
-                        rtn.error = true
-                        rtn.msg = results.content ?: 'unknown api error'
-                        log.warn("error: ${rtn.errorCode} - ${rtn.content}")
+                        //check for bad creds
+                        if(results.errorCode == 401i) {
+                            rtn.errorCode = 401i
+                            rtn.invalidLogin = true
+                            rtn.success = true
+                            rtn.error = true
+                            rtn.msg = results.content ?: 'invalid credentials'
+                        } else if(results.errorCode == 400i) {
+                            //request
+                            rtn.errorCode = 400i
+                            //consider this success - just no content
+                            rtn.success = true
+                            rtn.error = false
+                            rtn.msg = results.content ?: 'invalid api request'
+                        } else {
+                            rtn.errorCode = results.errorCode ?: 500i
+                            rtn.success = false
+                            rtn.error = true
+                            rtn.msg = results.content ?: 'unknown api error'
+                            log.warn("error: ${rtn.errorCode} - ${rtn.content}")
+                        }
                     }
                 }
             }
@@ -1710,7 +1796,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
     Collection<NetworkPoolType> getNetworkPoolTypes() {
         return [
                 new NetworkPoolType(code:'bluecat', name:'Bluecat', creatable:false, description:'Bluecat', rangeSupportsCidr: false, hostRecordEditable: false),
-                new NetworkPoolType(code:'bluecatipv6', name:'Bluecat IPv6', creatable:false, description:'Bluecat IPv6', rangeSupportsCidr: false, hostRecordEditable: false)
+                new NetworkPoolType(code:'bluecatipv6', name:'Bluecat IPv6', creatable:false, description:'Bluecat IPv6', rangeSupportsCidr: true, hostRecordEditable: false, ipv6Pool:true)
         ]
     }
 
@@ -1886,6 +1972,41 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
         }
         return null
     }
+
+    static formatDate(Object date, String outputFormat = "yyyy-MM-dd' 'HH:mm:ss.SSSSSSSSS") {
+        def rtn
+        try {
+            if(date) {
+                if(date instanceof Date)
+                    rtn = date.format(outputFormat, TimeZone.getTimeZone('GMT'))
+                else if(date instanceof CharSequence)
+                    rtn = date
+            }
+        } catch(ignored) { }
+        return rtn
+    }
+
+    private String generateExtraProperties(NetworkPoolServer poolServer, NetworkPoolIp networkPoolIp) {
+		try {
+			def extraProperties = poolServer.configMap?.extraProperties
+            if (extraProperties.contains('<%=username%>')) {
+                extraProperties = extraProperties.replaceAll('<%=username%>', networkPoolIp.createdBy?.username)
+            }
+            if (extraProperties.contains('<%=userId%>')) {
+                extraProperties = extraProperties.replaceAll('<%=userId%>', networkPoolIp.createdBy?.id)
+            }
+            if (extraProperties.contains('<%=dateCreated%>')) {
+                extraProperties = extraProperties.replaceAll('<%=dateCreated%>', formatDate(new Date()))
+            }
+			
+			log.debug("Extra Properties for Bluecat: {}", extraProperties)
+			return extraProperties
+		} catch(ex) {
+			log.error("Error generating extra properties for Bluecat: {}",ex.message,ex)
+			return null
+		}
+
+	}
 
     static Map getNetworkPoolConfig(String cidr) {
         def rtn = [config:[:], ranges:[]]
