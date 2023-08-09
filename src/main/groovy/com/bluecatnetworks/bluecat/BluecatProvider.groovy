@@ -1213,7 +1213,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
         } catch(e) {
             log.error("collect filtered items: ${e}", e)
         }
-        log.debug("Collect Filtered Items Results: ${rtn}")
+        log.debug("Collect Filtered Items Results: {}",rtn)
         return rtn
     }
 
@@ -1275,7 +1275,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
         } catch(e) {
             log.error("collectAllNetworks error: ${e}", e)
         }
-        log.debug("Collect All Networks Results: ${rtn}")
+        log.debug("Collect All Networks Results: {}",rtn)
         return rtn
     }
 
