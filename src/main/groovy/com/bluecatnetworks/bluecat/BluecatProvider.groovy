@@ -959,7 +959,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                     if(results?.success && results?.error != true) {
                         return ServiceResponse.success(poolIp)
                     } else {
-                        if(results.content == 'Object was not found') {
+                        if(results.content.contains('Object was not found')) {
                             return ServiceResponse.success(poolIp)
                         }
                     }
