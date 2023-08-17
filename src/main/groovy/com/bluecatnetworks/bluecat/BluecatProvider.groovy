@@ -380,8 +380,8 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
     void cacheNetworks(HttpApiClient client, String token, NetworkPoolServer poolServer, Map opts = [:]) {
         opts.doPaging = true
         def listResults
-        if(opts.filterList?.size() > 0) {
-            listResults = collectAllFilteredItems(client,token, poolServer, opts.filterList as List, opts)
+        if(poolServer.networkFilter?.size() > 0) {
+            listResults = collectAllFilteredItems(client,token, poolServer, poolServer.networkFilter.split(',').collect{it.toLong()}, opts)
         } else {
             listResults = collectAllNetworks(client,token,poolServer, opts)
         }
@@ -959,7 +959,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                     if(results?.success && results?.error != true) {
                         return ServiceResponse.success(poolIp)
                     } else {
-                        if(results.content == 'Object was not found') {
+                        if(results.content.contains('Object was not found')) {
                             return ServiceResponse.success(poolIp)
                         }
                     }
@@ -980,7 +980,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
         }
     }
 
-    def collectAllFilteredItems(HttpApiClient client, String token, NetworkPoolServer poolServer, List filterList, Map opts) {
+    def collectAllFilteredItems(HttpApiClient client, String token, NetworkPoolServer poolServer, List<Long> filterList, Map opts = [:]) {
         def rtn = [success:false, configurations:[], blocks:[], networks:[],views:[]]
         try {
             filterList?.each { filterItem ->
@@ -1431,7 +1431,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
             def apiPath = getServicePath(rpcConfig.serviceUrl) + 'getParent'
             HttpApiClient.RequestOptions requestOptions = new HttpApiClient.RequestOptions(ignoreSSL: rpcConfig.ignoreSSL)
             requestOptions.headers = [Authorization: "BAMAuthToken: ${token}".toString()]
-            requestOptions.queryParams = [id:entityId.toString()]
+            requestOptions.queryParams = [entityId:entityId.toString()]
             def results = client.callJsonApi(apiUrl,apiPath,null,null,requestOptions,'GET')
             if(results?.success && results?.error != true) {
                 rtn.success = true
