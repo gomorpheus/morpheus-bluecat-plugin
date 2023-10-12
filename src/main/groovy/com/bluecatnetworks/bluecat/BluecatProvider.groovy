@@ -40,12 +40,12 @@ import com.morpheusdata.model.projection.NetworkPoolIdentityProjection
 import com.morpheusdata.model.projection.NetworkPoolIpIdentityProjection
 import com.morpheusdata.response.ServiceResponse
 import groovy.util.logging.Slf4j
-import io.reactivex.Completable
-import io.reactivex.Single
-import io.reactivex.schedulers.Schedulers
+import io.reactivex.rxjava3.core.Completable
+import io.reactivex.rxjava3.core.Single
+import io.reactivex.rxjava3.core.Scheduler
 import org.apache.commons.net.util.SubnetUtils
 import org.apache.http.entity.ContentType
-import io.reactivex.Observable
+import io.reactivex.rxjava3.core.Observable
 import org.apache.tools.ant.types.spi.Service
 import org.apache.commons.validator.routines.InetAddressValidator
 

@@ -34,7 +34,7 @@ configurations {
 }
 
 dependencies {
-	provided "com.morpheusdata:morpheus-plugin-api:0.14.3"
+	provided "com.morpheusdata:morpheus-plugin-api:$plugincore"
 	provided "org.codehaus.groovy:groovy-all:$groovyVersion"
 	implementation 'commons-beanutils:commons-beanutils:1.9.3'
 	implementation "org.slf4j:slf4j-api:$slf4jVersion"
@@ -44,7 +44,7 @@ dependencies {
 
 	// Include morpheus-core and it's dependencies
 	testImplementation "com.morpheusdata:morpheus-plugin-api:0.14.3"
-	testImplementation 'io.reactivex.rxjava2:rxjava:2.2.0'
+	testImplementation 'io.reactivex.rxjava3:rxjava:3.1.8'
 	testImplementation 'org.apache.httpcomponents:httpclient:4.5.3'
 	testImplementation 'org.apache.httpcomponents:httpcore:4.4.5'
 	testImplementation "org.slf4j:slf4j-parent:$slf4jVersion"
@@ -77,7 +77,7 @@ jar {
 				'Morpheus-Color': '#ffffff',
 				'Morpheus-Labels': 'Plugin, Networking, ipam, dns',
 				'Morpheus-Repo': 'https://github.com/gomorpheus/morpheus-plugin-core',
-				'Morpheus-Min-Appliance-Version': "6.0.4"
+				'Morpheus-Min-Appliance-Version': minversion
 		)
 	}
 }
