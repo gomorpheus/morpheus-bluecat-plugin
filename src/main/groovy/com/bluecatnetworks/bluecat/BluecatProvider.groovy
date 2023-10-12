@@ -583,14 +583,14 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
 
     // Cache Zones methods
     def cacheZoneRecords(HttpApiClient client, String token, NetworkPoolServer poolServer) {
-        morpheus.network.domain.listIdentityProjections(poolServer.integration.id).flatMap {NetworkDomainIdentityProjection domain ->
+        morpheus.network.domain.listIdentityProjections(poolServer.integration.id).concatMap {NetworkDomainIdentityProjection domain ->
             Completable.mergeArray(
                     cacheZoneDomainRecords(client,token,poolServer, domain),
                     cacheZoneAliasRecords(client,token,poolServer, domain)
             ).toObservable().subscribeOn(Schedulers.io())
         }.doOnError{ e ->
             log.error("cacheZoneRecords error: ${e}", e)
-        }.subscribe()
+        }.blockingSubscribe()
     }
     // Cache Zones methods
     Completable cacheZoneDomainRecords(HttpApiClient client, String token, NetworkPoolServer poolServer, NetworkDomainIdentityProjection domain) {
