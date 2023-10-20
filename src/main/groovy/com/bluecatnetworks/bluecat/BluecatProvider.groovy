@@ -37,16 +37,12 @@ import com.morpheusdata.model.OptionType
 import com.morpheusdata.model.projection.NetworkDomainIdentityProjection
 import com.morpheusdata.model.projection.NetworkDomainRecordIdentityProjection
 import com.morpheusdata.model.projection.NetworkPoolIdentityProjection
-import com.morpheusdata.model.projection.NetworkPoolIpIdentityProjection
 import com.morpheusdata.response.ServiceResponse
 import groovy.util.logging.Slf4j
 import io.reactivex.rxjava3.core.Completable
-import io.reactivex.rxjava3.core.Single
-import io.reactivex.rxjava3.core.Scheduler
+import io.reactivex.rxjava3.schedulers.Schedulers
 import org.apache.commons.net.util.SubnetUtils
-import org.apache.http.entity.ContentType
 import io.reactivex.rxjava3.core.Observable
-import org.apache.tools.ant.types.spi.Service
 import org.apache.commons.validator.routines.InetAddressValidator
 
 /**
@@ -345,12 +341,12 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                 if(tokenResults.success) {
                     testResults = testNetworkPoolServer(bluecatClient,tokenResults.token as String,poolServer) as ServiceResponse<Map>
                     if(!testResults?.success) {
-                        morpheus.network.updateNetworkPoolServerStatus(poolServer, AccountIntegration.Status.error, 'error calling Bluecat').blockingGet()
+                        morpheus.network.updateNetworkPoolServerStatus(poolServer, AccountIntegration.Status.error, 'error calling Bluecat').subscribe().dispose()
                     } else {
-                        morpheus.network.updateNetworkPoolServerStatus(poolServer, AccountIntegration.Status.syncing).blockingGet()
+                        morpheus.network.updateNetworkPoolServerStatus(poolServer, AccountIntegration.Status.syncing).subscribe().dispose()
                     }
                 } else {
-                    morpheus.network.updateNetworkPoolServerStatus(poolServer, AccountIntegration.Status.error, 'error authenticating with Bluecat').blockingGet()
+                    morpheus.network.updateNetworkPoolServerStatus(poolServer, AccountIntegration.Status.error, 'error authenticating with Bluecat').subscribe().dispose()
                 }
             } else {
                 morpheus.network.updateNetworkPoolServerStatus(poolServer, AccountIntegration.Status.error, 'Bluecat api not reachable')
