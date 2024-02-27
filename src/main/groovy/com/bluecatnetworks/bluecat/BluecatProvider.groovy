@@ -239,7 +239,8 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
         }
         def rpcConfig = getRpcConfig(poolServer)
         HttpApiClient bluecatClient = new HttpApiClient()
-        bluecatClient.networkProxy = morpheusContext.async.setting.getGlobalNetworkProxy()
+        def networkProxy = morpheusContext.async.setting.getGlobalNetworkProxy()
+        bluecatClient.networkProxy = networkProxy
         def tokenResults
         try {
             def apiUrl = poolServer.serviceUrl
@@ -248,7 +249,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                 def apiUrlObj = new URL(apiUrl)
                 def apiHost = apiUrlObj.host
                 def apiPort = apiUrlObj.port > 0 ? apiUrlObj.port : (apiUrlObj?.protocol?.toLowerCase() == 'https' ? 443 : 80)
-                hostOnline = ConnectionUtils.testHostConnectivity(apiHost, apiPort, false, true, null)
+                hostOnline = ConnectionUtils.testHostConnectivity(apiHost, apiPort, false, true, networkProxy)
             } catch(e) {
                 log.error("Error parsing URL {}", apiUrl, e)
             }
