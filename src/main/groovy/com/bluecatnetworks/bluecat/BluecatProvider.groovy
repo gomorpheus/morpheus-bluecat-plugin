@@ -76,6 +76,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
     ServiceResponse createRecord(AccountIntegration integration, NetworkDomainRecord record, Map opts) {
         ServiceResponse<NetworkDomainRecord> rtn = new ServiceResponse<>()
         HttpApiClient client = new HttpApiClient()
+        client.networkProxy = morpheusContext.async.setting.getGlobalNetworkProxy()
         def poolServer = morpheus.network.getPoolServerByAccountIntegration(integration).blockingGet()
         def token
         def rpcConfig
@@ -162,6 +163,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                 morpheus.network.getPoolServerByAccountIntegration(integration).doOnSuccess({ poolServer ->
                     rpcConfig = getRpcConfig(poolServer)
                     HttpApiClient client = new HttpApiClient()
+                    client.networkProxy = morpheusContext.async.setting.getGlobalNetworkProxy()
                     try {
                         token = login(client,rpcConfig)
                         if(token.success) {
@@ -233,6 +235,8 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
         }
         def rpcConfig = getRpcConfig(poolServer)
         HttpApiClient bluecatClient = new HttpApiClient()
+        def networkProxy = morpheusContext.async.setting.getGlobalNetworkProxy()
+        bluecatClient.networkProxy = networkProxy
         def tokenResults
         try {
             def apiUrl = poolServer.serviceUrl
@@ -241,7 +245,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                 def apiUrlObj = new URL(apiUrl)
                 def apiHost = apiUrlObj.host
                 def apiPort = apiUrlObj.port > 0 ? apiUrlObj.port : (apiUrlObj?.protocol?.toLowerCase() == 'https' ? 443 : 80)
-                hostOnline = ConnectionUtils.testHostConnectivity(apiHost, apiPort, false, true, null)
+                hostOnline = ConnectionUtils.testHostConnectivity(apiHost, apiPort, false, true, networkProxy)
             } catch(e) {
                 log.error("Error parsing URL {}", apiUrl, e)
             }
@@ -323,6 +327,8 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
     void refresh(NetworkPoolServer poolServer) {
         log.debug("refreshNetworkPoolServer: {}", poolServer.dump())
         HttpApiClient bluecatClient = new HttpApiClient()
+        def networkProxy = morpheusContext.async.setting.getGlobalNetworkProxy()
+        bluecatClient.networkProxy = networkProxy
         bluecatClient.throttleRate = poolServer.serviceThrottleRate
         def tokenResults
         def rpcConfig = getRpcConfig(poolServer)
@@ -331,7 +337,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
             def apiUrlObj = new URL(apiUrl)
             def apiHost = apiUrlObj.host
             def apiPort = apiUrlObj.port > 0 ? apiUrlObj.port : (apiUrlObj?.protocol?.toLowerCase() == 'https' ? 443 : 80)
-            def hostOnline = ConnectionUtils.testHostConnectivity(apiHost, apiPort, false, true, null)
+            def hostOnline = ConnectionUtils.testHostConnectivity(apiHost, apiPort, false, true, networkProxy)
             log.debug("online: {} - {}", apiHost, hostOnline)
             def testResults
             // Promise
@@ -760,6 +766,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
     @Override
     ServiceResponse createHostRecord(NetworkPoolServer poolServer, NetworkPool networkPool, NetworkPoolIp networkPoolIp, NetworkDomain domain, Boolean createARecord, Boolean createPtrRecord) {
         HttpApiClient client = new HttpApiClient();
+        client.networkProxy = morpheusContext.async.setting.getGlobalNetworkProxy()
         InetAddressValidator inetAddressValidator = new InetAddressValidator()
         def rpcConfig = getRpcConfig(poolServer)
         def token
@@ -931,7 +938,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
     @Override
     ServiceResponse deleteHostRecord(NetworkPool networkPool, NetworkPoolIp poolIp, Boolean deleteAssociatedRecords) {
         HttpApiClient client = new HttpApiClient();
-
+        client.networkProxy = morpheusContext.async.setting.getGlobalNetworkProxy()
         def poolServer = morpheus.network.getPoolServerById(networkPool.poolServer.id).blockingGet()
         def rpcConfig = getRpcConfig(poolServer)
         def token
