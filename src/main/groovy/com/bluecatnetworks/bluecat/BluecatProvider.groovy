@@ -80,7 +80,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
     ServiceResponse createRecord(AccountIntegration integration, NetworkDomainRecord record, Map opts) {
         ServiceResponse<NetworkDomainRecord> rtn = new ServiceResponse<>()
         HttpApiClient client = new HttpApiClient()
-        client.networkProxy = morpheusContext.async.setting.getGlobalNetworkProxy()
+        client.networkProxy = morpheusContext.services.setting.getGlobalNetworkProxy()
         def poolServer = morpheus.network.getPoolServerByAccountIntegration(integration).blockingGet()
         def token
         def rpcConfig
@@ -167,7 +167,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                 morpheus.network.getPoolServerByAccountIntegration(integration).doOnSuccess({ poolServer ->
                     rpcConfig = getRpcConfig(poolServer)
                     HttpApiClient client = new HttpApiClient()
-                    client.networkProxy = morpheusContext.async.setting.getGlobalNetworkProxy()
+                    client.networkProxy = morpheusContext.services.setting.getGlobalNetworkProxy()
                     try {
                         token = login(client,rpcConfig)
                         if(token.success) {
@@ -239,7 +239,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
         }
         def rpcConfig = getRpcConfig(poolServer)
         HttpApiClient bluecatClient = new HttpApiClient()
-        def networkProxy = morpheusContext.async.setting.getGlobalNetworkProxy()
+        def networkProxy = morpheusContext.services.setting.getGlobalNetworkProxy()
         bluecatClient.networkProxy = networkProxy
         def tokenResults
         try {
@@ -331,7 +331,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
     void refresh(NetworkPoolServer poolServer) {
         log.debug("refreshNetworkPoolServer: {}", poolServer.dump())
         HttpApiClient bluecatClient = new HttpApiClient()
-        def networkProxy = morpheusContext.async.setting.getGlobalNetworkProxy()
+        def networkProxy = morpheusContext.services.setting.getGlobalNetworkProxy()
         bluecatClient.networkProxy = networkProxy
         bluecatClient.throttleRate = poolServer.serviceThrottleRate
         def tokenResults
@@ -773,7 +773,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
     @Override
     ServiceResponse createHostRecord(NetworkPoolServer poolServer, NetworkPool networkPool, NetworkPoolIp networkPoolIp, NetworkDomain domain, Boolean createARecord, Boolean createPtrRecord) {
         HttpApiClient client = new HttpApiClient();
-        client.networkProxy = morpheusContext.async.setting.getGlobalNetworkProxy()
+        client.networkProxy = morpheusContext.services.setting.getGlobalNetworkProxy()
         InetAddressValidator inetAddressValidator = new InetAddressValidator()
         def rpcConfig = getRpcConfig(poolServer)
         def token
@@ -945,7 +945,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
     @Override
     ServiceResponse deleteHostRecord(NetworkPool networkPool, NetworkPoolIp poolIp, Boolean deleteAssociatedRecords) {
         HttpApiClient client = new HttpApiClient();
-        client.networkProxy = morpheusContext.async.setting.getGlobalNetworkProxy()
+        client.networkProxy = morpheusContext.services.setting.getGlobalNetworkProxy()
         def poolServer = morpheus.network.getPoolServerById(networkPool.poolServer.id).blockingGet()
         def rpcConfig = getRpcConfig(poolServer)
         def token
