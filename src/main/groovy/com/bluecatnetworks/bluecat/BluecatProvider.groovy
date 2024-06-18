@@ -839,8 +839,6 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                         return ServiceResponse.error("Assign IP Address Error: Invalid IP Address ${networkPoolIp.ipAddress}")
                     }
                 } else {
-                    log.info("unable to allocate DNS records for bluecat IPAM. Attempting simple ip allocation instead.")
-                    
                     if (networkPool.type.code == 'bluecat') {
                         apiPath = getServicePath(rpcConfig.serviceUrl) + 'assignNextAvailableIP4Address'
                     } else if (networkPool.type.code == 'bluecatipv6') {
