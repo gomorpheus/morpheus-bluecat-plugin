@@ -80,6 +80,8 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
         def poolServer = morpheus.network.getPoolServerByAccountIntegration(integration).blockingGet()
         def token
         def rpcConfig
+        def quickDeploy = false
+
         try {
             if(integration) {
                 def fqdn = record.name
@@ -93,7 +95,9 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                 if(poolServer.configMap?.extraProperties) {
 					extraProperties = poolServer.configMap?.extraProperties
 				}
-
+                if (poolServer.configMap?.quickDeploy) {
+                    quickDeploy = true
+                }
                 Map<String,String> apiQuery
                 rpcConfig = getRpcConfig(poolServer)
                 token = login(client,rpcConfig)
@@ -114,6 +118,12 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                     def results = client.callJsonApi(apiUrl,apiPath,new HttpApiClient.RequestOptions(queryParams: apiQuery, headers: [Authorization: "BAMAuthToken: ${token.token}".toString()],ignoreSSL: rpcConfig.ignoreSSL),"POST")
                     //error
                     if(results?.success && results?.error != true) {
+                        if(quickDeploy != false) {
+                            ServiceResponse quickDeployResult = runQuickDeploy(client, token.token?.toString(), poolServer, record?.networkDomain?.externalId?.toLong())
+                            if(!quickDeployResult.success) {
+                                log.warn("Unable to perform Bluecat quickDeploy for network and DNS changes")
+                            }
+                        }
                         rtn.success = true
                         log.info("Results: ${results.content}")
                         record.externalId = results.content
@@ -770,13 +780,16 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
         InetAddressValidator inetAddressValidator = new InetAddressValidator()
         def rpcConfig = getRpcConfig(poolServer)
         def token
-
+        def quickDeploy = false
         def extraProperties
         if(poolServer.configMap?.extraProperties) {
             extraProperties = generateExtraProperties(poolServer, networkPoolIp)
         }
+        if (poolServer.configMap?.quickDeploy) {
+            quickDeploy = true
+        }
 
-        try {
+            try {
             token = login(client,rpcConfig)
             if(token.success) {
                 def hostname = networkPoolIp.hostname
@@ -839,8 +852,6 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                         return ServiceResponse.error("Assign IP Address Error: Invalid IP Address ${networkPoolIp.ipAddress}")
                     }
                 } else {
-                    log.info("unable to allocate DNS records for bluecat IPAM. Attempting simple ip allocation instead.")
-                    
                     if (networkPool.type.code == 'bluecat') {
                         apiPath = getServicePath(rpcConfig.serviceUrl) + 'assignNextAvailableIP4Address'
                     } else if (networkPool.type.code == 'bluecatipv6') {
@@ -865,6 +876,17 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                     requestOptions.queryParams = [absoluteName:hostname,addresses:networkPoolIp.ipAddress,ttl:'-1',viewId:domain.internalId]
                     apiPath = getServicePath(rpcConfig.serviceUrl) + 'addHostRecord'
                     client.callJsonApi(apiUrl,apiPath,null,null,requestOptions, 'POST')
+                }
+
+                if(results?.success && quickDeploy != false) {
+                    def entityId = networkPool?.externalId?.toLong()
+                    if(domain && domain.externalId) {
+                        entityId = domain.externalId?.toLong()
+                    }
+                    ServiceResponse quickDeployResult = runQuickDeploy(client, token.token?.toString(), poolServer, entityId)
+                    if(!quickDeployResult.success) {
+                        log.warn("Unable to perform Bluecat quickDeploy for network and DNS changes")
+                    }
                 }
 
                 if(results?.success && results?.error != true) {
@@ -1812,8 +1834,9 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                 new OptionType(code: 'bluecat.throttleRate', name: 'Throttle Rate', inputType: OptionType.InputType.NUMBER, defaultValue: 0, fieldName: 'serviceThrottleRate', fieldLabel: 'Throttle Rate', fieldContext: 'domain', displayOrder: 4),
                 new OptionType(code: 'bluecat.ignoreSsl', name: 'Ignore SSL', inputType: OptionType.InputType.CHECKBOX, defaultValue: 0, fieldName: 'ignoreSsl', fieldLabel: 'Disable SSL SNI Verification', fieldContext: 'domain', displayOrder: 5),
                 new OptionType(code: 'bluecat.inventoryExisting', name: 'Inventory Existing', inputType: OptionType.InputType.CHECKBOX, defaultValue: 0, fieldName: 'inventoryExisting', fieldLabel: 'Inventory Existing', fieldContext: 'config', displayOrder: 6),
-                new OptionType(code: 'bluecat.networkFilter', name: 'Network Filter', inputType: OptionType.InputType.TEXT, fieldName: 'networkFilter', fieldLabel: 'Network Filter', fieldContext: 'domain', displayOrder: 7),
-                new OptionType(code: 'bluecat.extraProperties', name: 'Extra Properties', inputType: OptionType.InputType.TEXT, fieldName: 'extraProperties', fieldLabel: 'Extra Properties', fieldContext: 'config', displayOrder: 8, helpText: "key=value|key2=value2")
+                new OptionType(code: 'bluecat.quickDeploy', name: 'Run Quick Deploy', inputType: OptionType.InputType.CHECKBOX, defaultValue: 0, fieldName: 'quickDeploy', fieldLabel: 'Run Quick Deploy', fieldContext: 'config', displayOrder: 7, helpText: "Trigger Bluecat Quick Deploy after changes."),
+                new OptionType(code: 'bluecat.networkFilter', name: 'Network Filter', inputType: OptionType.InputType.TEXT, fieldName: 'networkFilter', fieldLabel: 'Network Filter', fieldContext: 'domain', displayOrder: 8),
+                new OptionType(code: 'bluecat.extraProperties', name: 'Extra Properties', inputType: OptionType.InputType.TEXT, fieldName: 'extraProperties', fieldLabel: 'Extra Properties', fieldContext: 'config', displayOrder: 9, helpText: "key=value|key2=value2")
         ]
     }
 
@@ -1982,6 +2005,31 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
             }
         } catch(ignored) { }
         return rtn
+    }
+
+    /**
+     * Use Quick Deploy to instantly deploy changes that the current user has made to DNS resource records since the last full or quick deployment
+     */
+    private ServiceResponse runQuickDeploy(HttpApiClient client, String token, NetworkPoolServer poolServer, Long entityId, Map opts = [:]) {
+        try {
+            def rpcConfig = getRpcConfig(poolServer)
+            def apiUrl = cleanServiceUrl(rpcConfig.serviceUrl)
+            def apiPath = getServicePath(rpcConfig.serviceUrl) + 'quickDeploy'
+            HttpApiClient.RequestOptions requestOptions = new HttpApiClient.RequestOptions(ignoreSSL: rpcConfig.ignoreSSL)
+            requestOptions.headers = [Authorization: "BAMAuthToken: ${token}".toString()]
+            requestOptions.queryParams = [entityId:entityId?.toString()]
+            def results = client.callJsonApi(apiUrl,apiPath,null,null,requestOptions,'POST')
+            log.debug("quickDeploy results: {}", results)
+
+            if(results?.success) {
+                return ServiceResponse.success()
+            } else {
+                return ServiceResponse.error(results?.error ?: results?.msg)
+            }
+        } catch(e) {
+            log.error("quickDeploy error: ${e}", e)
+            return ServiceResponse.error("Unable to quickDeploy")
+        }
     }
 
     private String generateExtraProperties(NetworkPoolServer poolServer, NetworkPoolIp networkPoolIp) {
