@@ -79,7 +79,7 @@ jar {
 				'Morpheus-Logo-Dark': 'assets/bluecat-dark.svg',
 				'Morpheus-Color': '#ffffff',
 				'Morpheus-Labels': 'Plugin, Networking, ipam, dns',
-				'Morpheus-Repo': 'https://github.com/gomorpheus/morpheus-plugin-core',
+				'Morpheus-Repo': 'https://github.com/gomorpheus/morpheus-bluecat-plugin',
 				'Morpheus-Min-Appliance-Version': minversion
 		)
 	}
