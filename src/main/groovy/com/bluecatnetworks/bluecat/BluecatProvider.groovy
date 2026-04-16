@@ -125,13 +125,13 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                             }
                         }
                         rtn.success = true
-                        log.info("Results: ${results.content}")
-                        record.externalId = results.content
+                        log.info("Results: ${results.data}")
+                        record.externalId = results.data?.toString()
                         record.name = fqdn
                         return new ServiceResponse<NetworkDomainRecord>(true,null,null,record)
                     } else {
-                        log.info("Error: ${results.content}")
-                        return ServiceResponse.error(results.content)
+                        log.info("Error: ${results.data}")
+                        return ServiceResponse.error(results.data?.toString())
                     }
                 } else {
                     return ServiceResponse.error("Authentication Error adding DNS Record from Bluecat")
@@ -892,7 +892,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                 if(results?.success && results?.error != true) {
                     log.info("getNextIpAddress: ${results}")
                     if(networkPoolIp.ipAddress) {
-                        networkPoolIp.externalId = results.content
+                        networkPoolIp.externalId = results.data?.toString()
                     } else {
                         if (networkPool.type.code == 'bluecat') {
                             def extraProps = extractNetworkProperties(results.data?.properties)
@@ -984,7 +984,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                     if(results?.success && results?.error != true) {
                         return ServiceResponse.success(poolIp)
                     } else {
-                        if(results.content.contains('Object was not found')) {
+                        if(results.data?.toString()?.contains('Object was not found')) {
                             return ServiceResponse.success(poolIp)
                         }
                     }
@@ -1754,20 +1754,20 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
                             rtn.invalidLogin = true
                             rtn.success = true
                             rtn.error = true
-                            rtn.msg = results.content ?: 'invalid credentials'
+                            rtn.msg = results.data?.toString() ?: 'invalid credentials'
                         } else if(results.errorCode == 400i) {
                             //request
                             rtn.errorCode = 400i
                             //consider this success - just no content
                             rtn.success = true
                             rtn.error = false
-                            rtn.msg = results.content ?: 'invalid api request'
+                            rtn.msg = results.data?.toString() ?: 'invalid api request'
                         } else {
                             rtn.errorCode = results.errorCode ?: 500i
                             rtn.success = false
                             rtn.error = true
-                            rtn.msg = results.content ?: 'unknown api error'
-                            log.warn("error: ${rtn.errorCode} - ${rtn.content}")
+                            rtn.msg = results.data?.toString() ?: 'unknown api error'
+                            log.warn("error: ${rtn.errorCode} - ${rtn.msg}")
                         }
                     }
                 }
@@ -1900,7 +1900,7 @@ class BluecatProvider implements IPAMProvider, DNSProvider {
 
             if(results?.success && results?.error != true) {
                 log.debug("login: ${results}")
-                def rawToken = results.content
+                def rawToken = results.data?.toString() ?: results.content
                 def startIndex = rawToken.indexOf('BAMAuthToken')
                 def endIndex = rawToken.indexOf('<-')
                 if(startIndex > -1 && endIndex > -1) {
