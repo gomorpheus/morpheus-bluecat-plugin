@@ -1,88 +1,133 @@
-# Morpheus Bluecat Plugin
+# Morpheus BlueCat Plugin
 
-This plugin provides an IPAM and DNS integration between [BlueCat Address Manager](https://bluecatnetworks.com/) and [Morpheus](https://morpheusdata.com). It enables IPv4 and IPv6 network pool sync, DNS zone and record inventory, host record management, IP allocation, and IP release automation from within the Morpheus platform.
+The Morpheus BlueCat Plugin integrates Morpheus with BlueCat Address Manager (BAM) to provide IP address management (IPAM) and DNS record automation. The plugin communicates with the BlueCat REST API to allocate IP addresses, register DNS records, and synchronise network pools.
 
-## Requirements
+## Table of Contents
 
-| Component | Minimum Version |
-|-----------|----------------|
-| Morpheus | 9.0.0 |
+- [Features](#features)
+- [Requirements](#requirements)
+- [Repository structure](#repository-structure)
+- [Building the plugin](#building-the-plugin)
+- [License](#license)
+- [Installing](#installing)
+- [Detailed Usage Steps](#detailed-usage-steps)
+- [API Endpoints](#api-endpoints)
 
-## Installation
-
-1. Download the latest `.jar` from the [Releases](https://github.com/HewlettPackard/morpheus-bluecat-plugin/releases) page, or [build it yourself](#building).
-2. In Morpheus, navigate to **Administration → Integrations → Plugins**.
-3. Click **Browse** and upload the `.jar` file.
-4. The **Bluecat** IPAM/DNS network service integration will appear after the plugin loads.
-
-## Configuration
-
-When adding a Bluecat network service in Morpheus (**Infrastructure → Network → Services**), provide the following:
-
-| Field | Description |
-|-------|-------------|
-| **API Url** | BlueCat Address Manager API endpoint root URL. |
-| **Credentials** | Morpheus credential containing the BlueCat username and password. |
-| **Username** | BlueCat username used when local credentials are selected. |
-| **Password** | BlueCat password used when local credentials are selected. |
-| **Throttle Rate** | Optional API throttle rate for BlueCat requests. |
-| **Disable SSL SNI Verification** | Disables SSL SNI verification when connecting to BlueCat. |
-| **Inventory Existing** | Syncs existing DNS A and CNAME records from BlueCat into Morpheus. |
-| **Run Quick Deploy** | Triggers BlueCat Quick Deploy after network and DNS changes. |
-| **Network Filter** | Optional comma-separated list of BlueCat entity IDs used to limit synced networks. |
-| **Extra Properties** | Additional BlueCat properties sent as `key=value|key2=value2`. |
-
-Credentials can also be stored as a Morpheus [Credential](https://docs.morpheusdata.com/en/latest/administration/credentials/credentials.html) and selected at network service setup time.
+---
 
 ## Features
 
-### IPAM Sync
+### IP Address Management
 
-The plugin implements `IPAMProvider` and keeps Morpheus network pools aligned with BlueCat Address Manager.
-
-- **IPv4 networks** — synced as Bluecat network pools with CIDR and range data
-- **IPv6 networks** — synced as Bluecat IPv6 network pools
-- **Configurations and DNS views** — associated with synced pools for downstream allocation and record creation
-- **Filtered sync** — optionally limits inventory to selected BlueCat configurations, blocks, or networks
-
-Any additions, updates, and removals in BlueCat are automatically reflected in Morpheus on the next network service refresh.
-
-### IP Allocation and Release
-
-Morpheus can allocate and release addresses from synced BlueCat pools during workload lifecycle operations. Supported operations include:
-
-- Assign a requested IPv4 or IPv6 address when available
-- Allocate the next available IPv4 or IPv6 address from a pool
-- Create host records during allocation
-- Release IP/device records when workloads are removed
-- Optionally run BlueCat Quick Deploy after allocation or release changes
-
-### DNS Zone Sync
-
-The plugin implements `DNSProvider` and discovers authoritative DNS zones from BlueCat.
-
-- **Authoritative zones** — synced into Morpheus as network domains
-- **DNS views** — retained on synced zones for record placement
-- **Existing record inventory** — optional sync of existing records when enabled in configuration
+Allocate and release IP addresses from BlueCat Address Manager network pools within Morpheus. Supports automatic next-available IP selection, manual IP entry, and existing inventory import.
 
 ### DNS Record Management
 
-DNS records can be managed from Morpheus through the BlueCat API. Supported operations include:
+Create and delete A, AAAA, CNAME, TXT, and MX DNS records in BlueCat zones when instances are provisioned or decommissioned. Supports optional Quick Deploy to push changes immediately to DNS servers.
 
-- Create generic DNS records
-- Create CNAME alias records
-- Delete DNS records
-- Sync existing A records
-- Sync existing CNAME records
+### Cloud Sync
 
-## Building
+Morpheus synchronises the following BlueCat resources for inventory:
 
-```bash
-./gradlew shadowJar
+- Network pools (subnets managed in BAM)
+- DNS zones and records
+
+---
+
+## Requirements
+
+| Requirement | Version |
+|-------------|---------|
+| Morpheus | 9.0.0 or later |
+| Java | 25 or later |
+| Gradle | Use the included Gradle wrapper (`./gradlew`) |
+
+Additional prerequisites:
+
+- A running BlueCat Address Manager instance accessible over HTTP or HTTPS
+- A BlueCat user account with API access and sufficient permissions to read/write networks and DNS records
+- Network access from the Morpheus appliance to the BAM API host over the configured port
+- HTTPS recommended; HTTP is supported but not recommended (configure per-integration)
+
+---
+
+## Repository structure
+
+```
+src/main/groovy/com/bluecatnetworks/bluecat/
+├── BluecatPlugin.groovy    - Plugin entry point; registers BluecatProvider
+└── BluecatProvider.groovy  - IPAMProvider implementation; IPAM and DNS operations, sync, OptionTypes
+build.gradle, gradle.properties - Build configuration and plugin metadata
 ```
 
-The plugin JAR will be written to `build/libs/`.
+---
+
+## Building the plugin
+
+Run the following command to compile and package the plugin jar:
+
+```bash
+./gradlew clean build
+```
+
+The packaged jar will be written to `build/libs/`.
+
+To execute tests, use the following command:
+
+```bash
+./gradlew test
+```
+
+---
 
 ## License
 
-Copyright 2024 Morpheus Data, LLC. Licensed under the [Apache License, Version 2.0](LICENSE).
+This project is licensed under the Apache License 2.0.
+
+See the [LICENSE](LICENSE) file for details.
+
+---
+
+## Installing
+
+1. Build the plugin (see [Building the plugin](#building-the-plugin)) or download a released jar.
+2. In Morpheus, navigate to **Administration > Integrations > Plugins**.
+3. Click **Add** and upload the `morpheus-bluecat-plugin-<version>.jar` from `build/libs/`.
+4. Navigate to **Infrastructure > Networks > IP Pools > Add** and select **BlueCat** to configure the integration.
+
+---
+
+## Detailed Usage Steps
+
+### Adding a BlueCat IPAM Integration
+
+1. Go to **Infrastructure > Networks > IP Pools > Add**.
+2. Select **BlueCat** as the pool server type.
+3. Enter the **API Url** (e.g. `https://bam.example.com`), **Username**, and **Password** (or select a stored credential).
+4. Optionally configure **Throttle Rate**, **Disable SSL SNI Verification**, **Inventory Existing**, **Run Quick Deploy**, **Network Filter**, and **Extra Properties**.
+5. Save. Morpheus connects to BAM and syncs available network pools.
+
+### Allocating an IP Address
+
+When provisioning an instance on a network backed by a BlueCat pool, Morpheus automatically calls BAM to reserve the next available IP. The reserved IP is assigned to the instance and a DNS record is created if DNS is configured on the network.
+
+### Releasing an IP Address
+
+When an instance is decommissioned, Morpheus calls BAM to release the IP and delete the associated DNS records.
+
+---
+
+## API Endpoints
+
+This plugin communicates with the **BlueCat Address Manager REST API** at the configured service URL. Authentication uses a session token obtained at login. All calls use HTTP or HTTPS as configured.
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `<serviceUrl>/Services/REST/v1/login` | GET | Obtain BAM session token |
+| `<serviceUrl>/Services/REST/v1/addAliasRecord` | POST | Create CNAME record |
+| `<serviceUrl>/Services/REST/v1/addGenericRecord` | POST | Create A/AAAA/TXT/MX record |
+| `<serviceUrl>/Services/REST/v1/delete` | DELETE | Delete a DNS record |
+| `<serviceUrl>/Services/REST/v1/getNextAvailableIP4Address` | GET | Allocate next available IPv4 address |
+| `<serviceUrl>/Services/REST/v1/assignIP4Address` | POST | Register an allocated IP |
+| `<serviceUrl>/Services/REST/v1/unassignIP4Address` | DELETE | Release an IP address |
+| `<serviceUrl>/Services/REST/v1/getEntitiesByType` | GET | List networks and pools |
